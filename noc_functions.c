@@ -71,9 +71,10 @@ double find_individual_testtime (NoC_node *noc_nodes, int input_core, int output
     return testtime;
 }
 
-// Finds the communication cost for all mappings (corresponding to the generated PSO particles)
+// Finds the communication cost for a given PSO particle mapping
 
 void find_communication_cost (PSO_particle *pso_particle, NoC_node *noc_nodes, int num_cores, IO_pairs *io_pairs, int num_io_pairs) {
+
     int num_test_cores = num_cores - (2 * num_io_pairs);   // Number of test cores in the NoC mesh network
     double communication_cost = 0;                         // Communication cost = Number of active MRs * test packets
     int test_core = 0;                                     // Temporary variable to store test core number
@@ -91,15 +92,15 @@ void find_communication_cost (PSO_particle *pso_particle, NoC_node *noc_nodes, i
 
         // Input core to test core
         if ((noc_nodes[input_core - 1].x_cord == noc_nodes[test_core - 1].x_cord) || (noc_nodes[input_core - 1].y_cord == noc_nodes[test_core - 1].y_cord))
-            pso_particle->mapping[i].communication_cost = 2 * noc_nodes[test_core-1].test_patterns;
+            pso_particle->communication_cost = 2 * noc_nodes[test_core-1].test_patterns;
         else
-            pso_particle->mapping[i].communication_cost = 3 * noc_nodes[test_core-1].test_patterns;
+            pso_particle->communication_cost = 3 * noc_nodes[test_core-1].test_patterns;
 
         // Test core to output core
         if ((noc_nodes[test_core - 1].x_cord == noc_nodes[output_core - 1].x_cord) || (noc_nodes[test_core - 1].y_cord == noc_nodes[output_core - 1].y_cord))
-            pso_particle->mapping[i].communication_cost = 2 * noc_nodes[test_core-1].test_patterns;
+            pso_particle->communication_cost = 2 * noc_nodes[test_core-1].test_patterns;
         else
-            pso_particle->mapping[i].communication_cost = 3 * noc_nodes[test_core-1].test_patterns;
+            pso_particle->communication_cost = 3 * noc_nodes[test_core-1].test_patterns;
     }
 }
 
@@ -263,7 +264,7 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                     else
                         resource_matrix[input_core - 1][input_core].busytime += individual_testtime;
                     
-                    // starttime = max(starttime, resource_matrix[input_core - 1][input_core].busytime - individual_testtime);
+                    endtime = resource_matrix[input_core - 1][input_core].busytime;
                     
                     // Update ROUTER busytimes and statuses (routing direction +x i.e. input port INJECTION to output port EAST)
                     max_busytime = max (resource_matrix[input_core - 1][input_core - 1].busyports[EAST][INPUT].busytime, 
@@ -275,7 +276,7 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                     if (resource_matrix[input_core - 1][input_core - 1].busytime < max_busytime + individual_testtime)
                         resource_matrix[input_core - 1][input_core - 1].busytime = max_busytime + individual_testtime;
             
-                    // starttime = max (starttime, resource_matrix[input_core - 1][input_core].busytime - individual_testtime);
+                    endtime = max(endtime, resource_matrix[input_core - 1][input_core - 1].busytime);
             
                     // From (input core + 1) to (input core + (difference in x-coordinates - 1))
                     // * Index of input core + 1 is input_core
@@ -288,6 +289,8 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         else
                             resource_matrix[input_core + j][input_core + j + 1].busytime += individual_testtime;
 
+                        endtime = max(endtime, resource_matrix[input_core + j][input_core + j + 1].busytime);
+
                         // Update ROUTER busytimes and statuses (routing direction +x i.e. input port WEST to output port EAST)
                         max_busytime = max (resource_matrix[input_core + j][input_core + j].busyports[EAST][INPUT].busytime, 
                                             resource_matrix[input_core + j][input_core + j].busyports[WEST][OUTPUT].busytime);
@@ -297,6 +300,8 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         resource_matrix[input_core + j][input_core + j].busyports[WEST][OUTPUT].port = EAST;
                         if (resource_matrix[input_core + j][input_core + j].busytime < max_busytime + individual_testtime)
                             resource_matrix[input_core + j][input_core + j].busytime = max_busytime + individual_testtime;
+
+                        endtime = max(endtime, resource_matrix[input_core + j][input_core + j].busytime);
                     }
                 }    
 
@@ -311,6 +316,8 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         resource_matrix[input_core - 1][input_core - 2].busytime = max(resource_matrix[input_core - 1][input_core - 2].prev_busytime + individual_testtime, resource_matrix[input_core - 1][input_core - 2].busytime);
                     else
                         resource_matrix[input_core - 1][input_core - 2].busytime += individual_testtime;
+                    
+                    endtime = max(endtime, resource_matrix[input_core - 1][input_core - 2].busytime);
                         
                     // Update ROUTER busytimes and statuses (routing direction -x i.e. input port INJECTION to output port WEST)
                     max_busytime = max (resource_matrix[input_core - 1][input_core - 1].busyports[WEST][INPUT].busytime, 
@@ -321,6 +328,8 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                     resource_matrix[input_core - 1][input_core - 1].busyports[INJECTION][OUTPUT].port = WEST;
                     if (resource_matrix[input_core - 1][input_core - 1].busytime < max_busytime + individual_testtime)
                         resource_matrix[input_core - 1][input_core - 1].busytime = max_busytime + individual_testtime;
+
+                    endtime = max(endtime, resource_matrix[input_core - 1][input_core - 1].busytime);
 
                     // From (input core - 1) to (input core - (difference in x-coordinates - 1))
                     // * Index of input core - 1 is input_core - 2
@@ -333,6 +342,8 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         else
                             resource_matrix[input_core - j - 2][input_core - j - 3].busytime += individual_testtime;
 
+                        endtime = max(endtime, resource_matrix[input_core - j - 2][input_core - j - 3].busytime);
+
                         // Update ROUTER busytimes and statuses (routing direction -x i.e. input port EAST to output port WEST)
                         max_busytime = max (resource_matrix[input_core - j - 2][input_core - j - 2].busyports[WEST][INPUT].busytime, 
                                             resource_matrix[input_core - j - 2][input_core - j - 2].busyports[EAST][OUTPUT].busytime);
@@ -342,6 +353,9 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         resource_matrix[input_core - j - 2][input_core - j - 2].busyports[EAST][OUTPUT].port = WEST;
                         if (resource_matrix[input_core - j - 2][input_core - j - 2].busytime < max_busytime + individual_testtime)
                             resource_matrix[input_core - j - 2][input_core - j - 2].busytime = max_busytime + individual_testtime;
+
+                        endtime = max(endtime, resource_matrix[input_core - j - 2][input_core - j - 2].busytime);
+
                     }
                 }
                 
@@ -360,6 +374,8 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                     else
                         resource_matrix[test_core - 1][test_core].busytime += individual_testtime;
 
+                    endtime = max(endtime, resource_matrix[test_core - 1][test_core].busytime);
+
                     // Update ROUTER busytimes and statuses (routing direction +x i.e. input port INJECTION to output port EAST)
                     max_busytime = max (resource_matrix[test_core - 1][test_core - 1].busyports[EAST][INPUT].busytime, 
                                         resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].busytime);
@@ -369,7 +385,9 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                     resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].port = EAST;
                     if (resource_matrix[test_core - 1][test_core - 1].busytime < max_busytime + individual_testtime)
                         resource_matrix[test_core - 1][test_core - 1].busytime = max_busytime + individual_testtime;
-            
+
+                    endtime = max(endtime, resource_matrix[test_core - 1][test_core - 1].busytime);
+
                     // From (test core + 1) to (test core + (difference in x-coordinates - 1))
                     // * Index of test core + 1 is input_core
                     for (int j = 0; j < (noc_nodes[output_core - 1].x_cord - noc_nodes[test_core - 1].x_cord - 1); j++) {
@@ -381,6 +399,8 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         else
                             resource_matrix[test_core + j][test_core + j + 1].busytime += individual_testtime;
 
+                        endtime = max(endtime, resource_matrix[test_core + j][test_core + j + 1].busytime);
+
                         // Update ROUTER busytimes and statuses (routing direction +x i.e. input port WEST to output port EAST)
                         max_busytime = max (resource_matrix[test_core + j][test_core + j].busyports[EAST][INPUT].busytime, 
                                             resource_matrix[test_core + j][test_core + j].busyports[WEST][OUTPUT].busytime);
@@ -390,6 +410,8 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         resource_matrix[test_core + j][test_core + j].busyports[WEST][OUTPUT].port = EAST;
                         if (resource_matrix[test_core + j][test_core + j].busytime < max_busytime + individual_testtime)
                             resource_matrix[test_core + j][test_core + j].busytime = max_busytime + individual_testtime;
+
+                        endtime = max(endtime, resource_matrix[test_core + j][test_core + j].busytime);
                     }
                 }    
 
@@ -404,7 +426,9 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         resource_matrix[test_core - 1][test_core - 2].busytime = max(resource_matrix[test_core - 1][test_core - 2].prev_busytime + individual_testtime, resource_matrix[test_core - 1][test_core - 2].busytime);
                     else
                         resource_matrix[test_core - 1][test_core - 2].busytime += individual_testtime;
-                        
+
+                    endtime = max(endtime, resource_matrix[test_core - 1][test_core - 2].busytime);
+
                     // Update ROUTER busytimes and statuses (routing direction -x i.e. input port INJECTION to output port WEST)
                     max_busytime = max (resource_matrix[test_core - 1][test_core - 1].busyports[WEST][INPUT].busytime, 
                                         resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].busytime);
@@ -414,6 +438,8 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                     resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].port = WEST;
                     if (resource_matrix[test_core - 1][test_core - 1].busytime < max_busytime + individual_testtime)
                         resource_matrix[test_core - 1][test_core - 1].busytime = max_busytime + individual_testtime;
+
+                    endtime = max(endtime, resource_matrix[test_core - 1][test_core - 1].busytime);
 
                     // From (test core - 1) to (test core - (difference in x-coordinates - 1))
                     // * Index of test core - 1 is input_core - 2
@@ -426,6 +452,8 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         else
                             resource_matrix[test_core - j - 2][test_core - j - 3].busytime += individual_testtime;
 
+                        endtime = max(endtime, resource_matrix[test_core - j - 2][test_core - j - 3].busytime);
+
                         // Update ROUTER busytimes and statuses (routing direction -x i.e. input port EAST to output port WEST)
                         max_busytime = max (resource_matrix[test_core - j - 2][test_core - j - 2].busyports[WEST][INPUT].busytime, 
                                             resource_matrix[test_core - j - 2][test_core - j - 2].busyports[EAST][OUTPUT].busytime);
@@ -435,6 +463,9 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         resource_matrix[test_core - j - 2][test_core - j - 2].busyports[EAST][OUTPUT].port = WEST;
                         if (resource_matrix[test_core - j - 2][test_core - j - 2].busytime < max_busytime + individual_testtime)
                             resource_matrix[test_core - j - 2][test_core - j - 2].busytime = max_busytime + individual_testtime;
+
+                        endtime = max(endtime, resource_matrix[test_core - j - 2][test_core - j - 2].busytime);
+
                     }
                 }
                 
@@ -456,7 +487,9 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         resource_matrix[ic_core - 1][ic_core - 1 + N_columns].busytime = max(resource_matrix[ic_core - 1][ic_core - 1 + N_columns].prev_busytime + individual_testtime, resource_matrix[ic_core - 1][ic_core - 1 + N_columns].busytime);
                     else
                         resource_matrix[ic_core - 1][ic_core - 1 + N_columns].busytime += individual_testtime;
-                        
+
+                    endtime = max(endtime, resource_matrix[ic_core - 1][ic_core - 1 + N_columns].busytime);
+
                     // Update ROUTER busytimes and statuses (routing direction +y i.e. input port EAST/WEST (xrouting_port_ic) to output port NORTH)
                     max_busytime = max (resource_matrix[ic_core - 1][ic_core - 1].busyports[NORTH][INPUT].busytime, 
                                         resource_matrix[ic_core - 1][ic_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime);
@@ -466,6 +499,8 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                     resource_matrix[ic_core - 1][ic_core - 1].busyports[xrouting_port_ic][OUTPUT].port = NORTH;
                     if (resource_matrix[ic_core - 1][ic_core - 1].busytime < max_busytime + individual_testtime)
                         resource_matrix[ic_core - 1][ic_core - 1].busytime = max_busytime + individual_testtime;
+
+                    endtime = max(endtime, resource_matrix[ic_core - 1][ic_core - 1].busytime);
 
                     // From (intermediate core + N columns) to (intermediate core + N columns * (difference in y-coordinates - 1))
                     // * Index of intermediate core + N columns is intermediate_core - 1 + N columns
@@ -478,6 +513,8 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         else
                             resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 2) * N_columns].busytime += individual_testtime;
 
+                        endtime = max(endtime, resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 2) * N_columns].busytime);
+
                         // Update ROUTER busytimes and statuses (routing direction +y i.e. input port EAST/WEST (xrouting_port_ic) to output port NORTH))
                         max_busytime = max (resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[NORTH][INPUT].busytime, 
                                             resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].busytime);
@@ -487,6 +524,9 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].port = NORTH;
                         if (resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busytime < max_busytime + individual_testtime)
                             resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busytime = max_busytime + individual_testtime;
+
+                        endtime = max(endtime, resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busytime);
+
                     }
                 } 
 
@@ -499,7 +539,9 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         resource_matrix[ic_core - 1][ic_core - 1 - N_columns].busytime = max(resource_matrix[ic_core - 1][ic_core - 1 - N_columns].prev_busytime + individual_testtime, resource_matrix[ic_core - 1][ic_core - 1 - N_columns].busytime);
                     else
                         resource_matrix[ic_core - 1][ic_core - 1 - N_columns].busytime += individual_testtime;
-                        
+
+                    endtime = max(endtime, resource_matrix[ic_core - 1][ic_core - 1 - N_columns].busytime);
+
                     // Update ROUTER busytimes and statuses (routing direction -y i.e. input port EAST/WEST (xrouting_port_ic) to output port SOUTH)
                     max_busytime = max (resource_matrix[ic_core - 1][ic_core - 1].busyports[SOUTH][INPUT].busytime, 
                                         resource_matrix[ic_core - 1][ic_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime);
@@ -509,6 +551,8 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                     resource_matrix[ic_core - 1][ic_core - 1].busyports[xrouting_port_ic][OUTPUT].port = SOUTH;
                     if (resource_matrix[ic_core - 1][ic_core - 1].busytime < max_busytime + individual_testtime)
                         resource_matrix[ic_core - 1][ic_core - 1].busytime = max_busytime + individual_testtime;
+
+                    endtime = max(endtime, resource_matrix[ic_core - 1][ic_core - 1].busytime);
 
                     // From (intermediate core - N columns) to (intermediate core - N columns * (difference in y-coordinates - 1))
                     // * Index of intermediate core - N columns is intermediate_core - 1 - N columns
@@ -521,6 +565,8 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         else
                             resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 2) * N_columns].busytime += individual_testtime;
 
+                        endtime = max(endtime, resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 2) * N_columns].busytime);
+
                         // Update ROUTER busytimes and statuses (routing direction +y i.e. input port EAST/WEST (xrouting_port_ic) to output port SOUTH))
                         max_busytime = max (resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[SOUTH][INPUT].busytime, 
                                             resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].busytime);
@@ -530,6 +576,9 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].port = SOUTH;
                         if (resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busytime < max_busytime + individual_testtime)
                             resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busytime = max_busytime + individual_testtime;
+
+                        endtime = max(endtime, resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busytime);
+
                     }
                 }
             
@@ -542,7 +591,9 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         resource_matrix[co_core - 1][co_core - 1 + N_columns].busytime = max(resource_matrix[co_core - 1][co_core - 1 + N_columns].prev_busytime + individual_testtime, resource_matrix[co_core - 1][co_core - 1 + N_columns].busytime);
                     else
                         resource_matrix[co_core - 1][co_core - 1 + N_columns].busytime += individual_testtime;
-                        
+
+                    endtime = max(endtime, resource_matrix[co_core - 1][co_core - 1 + N_columns].busytime);
+
                     // Update ROUTER busytimes and statuses (routing direction +y i.e. input port EAST/WEST (xrouting_port_ic) to output port NORTH)
                     max_busytime = max (resource_matrix[co_core - 1][co_core - 1].busyports[NORTH][INPUT].busytime, 
                                         resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime);
@@ -552,6 +603,8 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                     resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_ic][OUTPUT].port = NORTH;
                     if (resource_matrix[co_core - 1][co_core - 1].busytime < max_busytime + individual_testtime)
                         resource_matrix[co_core - 1][co_core - 1].busytime = max_busytime + individual_testtime;
+
+                    endtime = max(endtime, resource_matrix[co_core - 1][co_core - 1].busytime);
 
                     // From (intermediate core + N columns) to (intermediate core + N columns * (difference in y-coordinates - 1))
                     // * Index of intermediate core + N columns is intermediate_core - 1 + N columns
@@ -564,6 +617,8 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         else
                             resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 2) * N_columns].busytime += individual_testtime;
 
+                        endtime = max(endtime, resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 2) * N_columns].busytime);
+
                         // Update ROUTER busytimes and statuses (routing direction +y i.e. input port EAST/WEST (xrouting_port_ic) to output port NORTH))
                         max_busytime = max (resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[NORTH][INPUT].busytime, 
                                             resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].busytime);
@@ -573,6 +628,9 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].port = NORTH;
                         if (resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busytime < max_busytime + individual_testtime)
                             resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busytime = max_busytime + individual_testtime;
+
+                        endtime = max(endtime, resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busytime);
+
                     }
                 }    
         
@@ -585,7 +643,9 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         resource_matrix[co_core - 1][co_core - 1 - N_columns].busytime = max(resource_matrix[co_core - 1][co_core - 1 - N_columns].prev_busytime + individual_testtime, resource_matrix[co_core - 1][co_core - 1 - N_columns].busytime);
                     else
                         resource_matrix[co_core - 1][co_core - 1 - N_columns].busytime += individual_testtime;
-                        
+
+                    endtime = max(endtime, resource_matrix[co_core - 1][co_core - 1 - N_columns].busytime);
+
                     // Update ROUTER busytimes and statuses (routing direction -y i.e. input port EAST/WEST (xrouting_port_ic) to output port SOUTH)
                     max_busytime = max (resource_matrix[co_core - 1][co_core - 1].busyports[SOUTH][INPUT].busytime, 
                                         resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime);
@@ -595,6 +655,8 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                     resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_ic][OUTPUT].port = SOUTH;
                     if (resource_matrix[co_core - 1][co_core - 1].busytime < max_busytime + individual_testtime)
                         resource_matrix[co_core - 1][co_core - 1].busytime = max_busytime + individual_testtime;
+
+                    endtime = max(endtime, resource_matrix[co_core - 1][co_core - 1].busytime);
 
                     // From (intermediate core - N columns) to (intermediate core - N columns * (difference in y-coordinates - 1))
                     // * Index of intermediate core - N columns is intermediate_core - 1 - N columns
@@ -607,6 +669,8 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         else
                             resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 2) * N_columns].busytime += individual_testtime;
 
+                        endtime = max(endtime, resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 2) * N_columns].busytime);
+
                         // Update ROUTER busytimes and statuses (routing direction +y i.e. input port EAST/WEST (xrouting_port_ic) to output port SOUTH))
                         max_busytime = max (resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[SOUTH][INPUT].busytime, 
                                             resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].busytime);
@@ -616,8 +680,14 @@ void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int
                         resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].port = SOUTH;
                         if (resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busytime < max_busytime + individual_testtime)
                             resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busytime = max_busytime + individual_testtime;
+
+                        endtime = max(endtime, resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busytime);
+
                     }
                 }
+
+                starttime = endtime - individual_testtime;
+                update_schedule_list (pso_particle->schedule , starttime, endtime);
             }
             
             // If track_preemption[i] = LAST_TEST_ADMINISTERED --> testing of this core is complete
