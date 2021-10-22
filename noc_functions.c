@@ -99,9 +99,9 @@ void find_communication_cost (PSO_particle *pso_particle, NoC_node *noc_nodes, i
 
         // Test core to output core
         if ((noc_nodes[test_core - 1].x_cord == noc_nodes[output_core - 1].x_cord) || (noc_nodes[test_core - 1].y_cord == noc_nodes[output_core - 1].y_cord))
-            pso_particle->communication_cost = 2 * noc_nodes[test_core-1].test_patterns;
+            pso_particle->communication_cost += 2 * noc_nodes[test_core-1].test_patterns;
         else
-            pso_particle->communication_cost = 3 * noc_nodes[test_core-1].test_patterns;
+            pso_particle->communication_cost += 3 * noc_nodes[test_core-1].test_patterns;
     }
 }
 
