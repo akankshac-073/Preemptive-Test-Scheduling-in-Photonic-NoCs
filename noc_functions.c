@@ -72,7 +72,7 @@ double find_individual_testtime (NoC_node *noc_nodes, int input_core, int output
     return testtime;
 }
 
-// Finds the communication cost for a given PSO particle mapping
+// Finds the communication cost for a given PSO particle mapping --> consider hops (circuit switching scenario) --> use testtime (non-preemptive, single frequency)
 
 void find_communication_cost (PSO_particle *pso_particle, NoC_node *noc_nodes, int num_cores, IO_pairs *io_pairs, int num_io_pairs) {
 
