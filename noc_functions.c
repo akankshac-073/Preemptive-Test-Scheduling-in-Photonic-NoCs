@@ -56,9 +56,21 @@ double find_individual_testtime (NoC_node *noc_nodes, int input_core, int output
     int hop_length_co = 0;        // Distance in terms of hops from output core to test core
     double testtime = 0;          // Testtime = [1 + Max{hop_length_ic, hop_length_co}] × no_test_patterns + [Min{hop_length_ic, hop_length_co}]    
     
-    // FIXME: Circuit switching hop lengths 1
-    hop_length_ic = abs(noc_nodes[input_core - 1].x_cord - noc_nodes[test_core - 1].x_cord) + abs(noc_nodes[input_core - 1].y_cord - noc_nodes[test_core - 1].y_cord);
-    hop_length_co = abs(noc_nodes[output_core - 1].x_cord - noc_nodes[test_core - 1].x_cord) + abs(noc_nodes[output_core - 1].y_cord - noc_nodes[test_core - 1].y_cord);
+    // FIXME: Modify packet switching hop lengths to circuit switching hop lengths -- done
+    // hop_length_ic = abs(noc_nodes[input_core - 1].x_cord - noc_nodes[test_core - 1].x_cord) + abs(noc_nodes[input_core - 1].y_cord - noc_nodes[test_core - 1].y_cord);
+    // hop_length_co = abs(noc_nodes[output_core - 1].x_cord - noc_nodes[test_core - 1].x_cord) + abs(noc_nodes[output_core - 1].y_cord - noc_nodes[test_core - 1].y_cord);
+
+    // Input core to test core
+    if ((noc_nodes[input_core - 1].x_cord == noc_nodes[test_core - 1].x_cord) || (noc_nodes[input_core - 1].y_cord == noc_nodes[test_core - 1].y_cord))
+        hop_length_ic = 2;
+    else
+        hop_length_ic = 3;
+
+    // Test core to output core
+    if ((noc_nodes[test_core - 1].x_cord == noc_nodes[output_core - 1].x_cord) || (noc_nodes[test_core - 1].y_cord == noc_nodes[output_core - 1].y_cord))
+        hop_length_co = 2;
+    else
+        hop_length_co = 3;
 
     // Testtime calculation - [ref Thermal-aware Test Scheduling Strategy for Network-on-Chip based Systems] -- wormhole
     if (hop_length_ic >= hop_length_co)
