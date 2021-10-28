@@ -66,15 +66,15 @@ double find_individual_testtime (NoC_node *noc_nodes, int input_core, int output
     
     // Input core to test core
     if ((noc_nodes[input_core - 1].x_cord == noc_nodes[test_core - 1].x_cord) || (noc_nodes[input_core - 1].y_cord == noc_nodes[test_core - 1].y_cord))
-        hop_length_ic = 2;
+        hop_length_ic = 1;
     else
-        hop_length_ic = 3;
+        hop_length_ic = 2;
 
     // Test core to output core
     if ((noc_nodes[test_core - 1].x_cord == noc_nodes[output_core - 1].x_cord) || (noc_nodes[test_core - 1].y_cord == noc_nodes[output_core - 1].y_cord))
-        hop_length_co = 2;
+        hop_length_co = 1;
     else
-        hop_length_co = 3;
+        hop_length_co = 2;
 
     // Testtime calculation - [ref Thermal-aware Test Scheduling Strategy for Network-on-Chip based Systems] -- wormhole
     if (hop_length_ic >= hop_length_co)
