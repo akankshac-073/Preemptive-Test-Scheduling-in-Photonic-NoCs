@@ -60,6 +60,10 @@ double find_individual_testtime (NoC_node *noc_nodes, int input_core, int output
     // hop_length_ic = abs(noc_nodes[input_core - 1].x_cord - noc_nodes[test_core - 1].x_cord) + abs(noc_nodes[input_core - 1].y_cord - noc_nodes[test_core - 1].y_cord);
     // hop_length_co = abs(noc_nodes[output_core - 1].x_cord - noc_nodes[test_core - 1].x_cord) + abs(noc_nodes[output_core - 1].y_cord - noc_nodes[test_core - 1].y_cord);
 
+    // Should the mapping be updated accrodingly??
+    frequency = 1.0;
+    preemption = 1.0;
+    
     // Input core to test core
     if ((noc_nodes[input_core - 1].x_cord == noc_nodes[test_core - 1].x_cord) || (noc_nodes[input_core - 1].y_cord == noc_nodes[test_core - 1].y_cord))
         hop_length_ic = 2;
@@ -178,7 +182,6 @@ void update_schedule_list (Schedule_head *head, double starttime, double endtime
 
     return;
 }
-
 
 void find_particle_fitness (PSO_particle *pso_particle, NoC_node *noc_nodes, int N_columns, int num_cores, IO_pairs *io_pairs, int num_io_pairs) {
 
