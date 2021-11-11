@@ -1,19 +1,23 @@
+// =================
+// MACRO DEFINITIONS
+// =================
+
 #define MAX_NUM_CORES 20                           // Maximum number of cores allowed for a NoC -- just for array declaration convenience
-#define NUM_PSO_PARTICLES 1                        // Number of PSO particles considered for simulation
+#define NUM_PSO_PARTICLES 5                        // Number of PSO particles considered for simulation
 #define UNALLOCATED -1                             // To indicate UNALLOCATED field elements
 
-// NOC NODE PARAMETER VALUES
+// NoC node parameter values
 
 #define TEST_CORE 1                                // core_type flag value 1 corresponds to test core
 #define INPUT_CORE 2                               // core_type flag value 2 corresponds to input core
 #define OUTPUT_CORE 3                              // core_type flag value 3 corresponds to output core       
 
-// PSO EVOLUTION CONSTANT VALUES
+// PSO evolution constants
 
 #define ALPHA 0.5
 #define BETA 0.5
 
-// ROUTER PORTS
+// Router ports
 
 // 16 Valid Router Statuses -- in accordance with XY routing
 // For Output port --> Injection, Input ports allowed --> North, South, East, West, Unallocated (4)
@@ -35,34 +39,38 @@
 
 #define EJECTION 0
 
-// Busyports struct 2D array second indices 
-// - indicating if the port and busytime information is for OUTPUT port corresponding to port index or INPUT port corresponding to port index
+// Busyports struct 2D array second indices - indicating if the port and busytime information is for OUTPUT port corresponding to port index or INPUT port corresponding to port index
 
 #define INPUT 0
 #define OUTPUT 1
 
 // Active MR counts for different routing paths MR_<input port>_<output port>
-// Consider number of Mrs into test packets
-#define MR_NORTH_INJECTION 1
-#define MR_SOUTH_INJECTION 1 // check path
-#define MR_EAST_INJECTION 1
-#define MR_WEST_INJECTION 1
-#define MR_INJECTION_NORTH 1 
-#define MR_SOUTH_NORTH 0
-#define MR_EAST_NORTH 1
-#define MR_WEST_NORTH 1
-#define MR_INJECTION_SOUTH 1
-#define MR_NORTH_SOUTH 0
-#define MR_EAST_SOUTH 1
-#define MR_WEST_SOUTH 1
-#define MR_INJECTION_EAST 1
-#define MR_WEST_EAST 0
-#define MR_INJECTION_WEST 1
-#define MR_EAST_WEST 0
 
-// Indicates test completion
+// #define MR_NORTH_INJECTION 1
+// #define MR_SOUTH_INJECTION 1
+// #define MR_EAST_INJECTION 1
+// #define MR_WEST_INJECTION 1
+// #define MR_INJECTION_NORTH 1 
+// #define MR_SOUTH_NORTH 0
+// #define MR_EAST_NORTH 1
+// #define MR_WEST_NORTH 1
+// #define MR_INJECTION_SOUTH 1
+// #define MR_NORTH_SOUTH 0
+// #define MR_EAST_SOUTH 1
+// #define MR_WEST_SOUTH 1
+// #define MR_INJECTION_EAST 1
+// #define MR_WEST_EAST 0
+// #define MR_INJECTION_WEST 1
+// #define MR_EAST_WEST 0
+
+// To indicate test completion (completion of all preemption instances)
 
 #define LAST_TEST_ADMINISTERED -73
+
+// Valid bit values
+
+#define VALID 1
+#define INVALID 0
 
 // NoC node
 
@@ -87,20 +95,20 @@ typedef struct {
 // Particle schedule linked list node
 
 struct _schedule {
-    double starttime;
-    double endtime;
-    struct _schedule* next;
+    double starttime;                              // Test instance start time for a given particle
+    double endtime;                                // Test instance end time for a given particle
+    // struct _schedule* next;
 };
 
 typedef struct _schedule Schedule_node;
 
-// Schedule HEAD structure
+// Schedule HEAD structure -- Schedule list is NOT required for the non-preemptive test case
 
-typedef struct {
-    double min_time;
-    double max_time; 
-    Schedule_node *head_node;
-} Schedule_head;
+// typedef struct {
+//     double min_time;                               // Minimum of start times for all test instances for a given particle
+//     double max_time;                               // Maximum of end times for all test instances for a given particle
+//     Schedule_node *head_node;                      // Schedule list head
+// } Schedule_head;
 
 // PSO particle
 
@@ -112,7 +120,7 @@ typedef struct {
     double fitness;                                // Fitness function value calculated for the given mapping
     double lbest_mapping [4 * MAX_NUM_CORES];      // The mapping corresponding to the best fitness function value obtained this particle till now
     double lbest_fitness;                          // The best fitness function value obtained this particle till now
-    Schedule_head *schedule;                       // Linked list containing start and end times of testing for the given particle
+    Schedule_node *schedule;                       // Linked list containing start and end times of testing for the given particle
 } PSO_particle;
 
 // Global best particle
@@ -130,14 +138,11 @@ typedef struct {
 // Resource matrix
 
 typedef struct {
+    double busytime;                               // If the resource status is BUSY, this field gives the time till which the resource remains occupied  
     Busyports busyports[5][2];                     // If the resource type is a router, this structure tracks all ACTIVE busy statuses and their busytimes
                                                    // First index gives port, second index gives the port type for which information is stored
                                                    // For instance, busyports[EAST][INPUT].port = WEST implies, the WEST is the INPUT port corresponding
                                                    // to OUTPUT port EAST, busytime for corresponding pair is stored in busyports[EAST][INPUT].busytimes
-    double busychannel;                            // If the resource type is a link, track the fraction of channel occupied for given resource
-    double prev_busytime;                          // Required to calculate busytime when the resource is used simultaneously by multiple tests
-                                                   // This field holds the previous busytime (max{busytime calculated by all prev occupying tests})
-    double busytime;                               // If the resource status is BUSY, this field gives the time till which the resource remains occupied  
 } Resource;
 
 // Swap operators
@@ -146,6 +151,16 @@ typedef struct {
     int swap_idx1;                                 // Index of the first element to be swapped 
     int swap_idx2;                                 // Index of the second element to be swapped 
 } Swap_operator;
+
+// CLAP input array
+
+typedef struct {
+    int source_x;
+    int source_y;
+    int destination_x;
+    int destination_y;
+    int valid_bit;
+} CLAP_input;
 
 
 // Function declarations
@@ -161,13 +176,14 @@ void configure_io_pairs (FILE* in_file, IO_pairs *io_pairs, NoC_node *noc_nodes,
 void read_test_core_parameters (FILE* in_file, IO_pairs *io_pairs, NoC_node *noc_nodes, int num_cores, int num_test_cores);
 
 // Initializes PSO particles by initializing the solution vector fields and calculating the resulting fitnessAlso initializes the local and global best particles for this stage 
-void init_pso_particles (PSO_particle *pso_particle, Gbest_PSO_particle *gbest_pso_particle, NoC_node *noc_nodes, int num_cores, double *freq, int num_freq, IO_pairs *io_pairs, int num_io_pairs, int N_columns);
+void init_pso_particles (PSO_particle *pso_particle, Gbest_PSO_particle *gbest_pso_particle, NoC_node *noc_nodes, int num_cores, /*double *freq, int num_freq,*/ IO_pairs *io_pairs, int num_io_pairs, int N_columns);
+
+// Populates the resource matrix with busytimes for all resources [links and router ports] in accordance with the XY-routing algorithm
+void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, int N_columns, int num_cores, IO_pairs *io_pairs, int num_io_pairs);
 
 // Finds the particle fitness = w.testtime + (1-w).SNR -- w optimal, as testtime increases and SNR decreases
-void find_particle_fitness ();
 
 // Generates a random number between 0 and 1 (uniform distribution)
-double generate_random_number ();
 
 // Swaps io pairs in arrays a and b with given probability
 void swap_io_pair (int num_test_cores, double *a, double *b, double probability);
@@ -189,4 +205,5 @@ void print_pso_particle_info (PSO_particle *pso_particle, int num_test_cores);
 
 // Utility function to print global best particle's info
 void print_global_best_info (Gbest_PSO_particle *gbest_pso_particle, int num_test_cores);
+
 
