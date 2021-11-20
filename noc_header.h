@@ -2,8 +2,9 @@
 // MACRO DEFINITIONS
 // =================
 
-#define MAX_NUM_CORES 20                           // Maximum number of cores allowed for a NoC -- just for array declaration convenience
-#define NUM_PSO_PARTICLES 5                        // Number of PSO particles considered for simulation
+#define MAX_NUM_CORES 30                           // Maximum number of cores allowed for a NoC -- just for array declaration convenience
+#define MAX_IO_PAIRS 5                             // Maximum number of io pairs allowed for a NoC -- just for array declaration convenience
+#define NUM_PSO_PARTICLES 1                        // Number of PSO particles considered for simulation
 #define UNALLOCATED -1                             // To indicate UNALLOCATED field elements
 
 // NoC node parameter values
@@ -67,10 +68,9 @@
 
 #define LAST_TEST_ADMINISTERED -73
 
-// Valid bit values
 
-#define VALID 1
-#define INVALID 0
+#define FILLED 1
+#define NOT_FILLED 0
 
 // NoC node
 
@@ -84,43 +84,41 @@ typedef struct {
     int scan_chain_length;                         // Scan chain length corresponding to this core
 } NoC_node;
 
+// Structs required to maintain schedule list per IO pair
+
+struct _io_node {
+    double starttime;                              // Test start time
+    double endtime;                                // Test end time
+    int test_core;                                 // Core under test
+    struct _io_node *next;
+};
+
+typedef struct _io_node IO_node;
+
+typedef struct {
+    int size;                                      // Total number of nodes in IO schedule list
+    IO_node *head_node;                            // Pointer to head node of IO schedule list
+} IO_head;
+
 // IO pair
 
 typedef struct {
     int io_pair_no;                                // IO pair index
     int input_core_no;                             // Input core index
     int output_core_no;                            // Output core index
+    IO_head io_head;                               // IO schedule list head
 } IO_pairs;
-
-// Particle schedule linked list node
-
-struct _schedule {
-    double starttime;                              // Test instance start time for a given particle
-    double endtime;                                // Test instance end time for a given particle
-    // struct _schedule* next;
-};
-
-typedef struct _schedule Schedule_node;
-
-// Schedule HEAD structure -- Schedule list is NOT required for the non-preemptive test case
-
-// typedef struct {
-//     double min_time;                               // Minimum of start times for all test instances for a given particle
-//     double max_time;                               // Maximum of end times for all test instances for a given particle
-//     Schedule_node *head_node;                      // Schedule list head
-// } Schedule_head;
 
 // PSO particle
 
 typedef struct {
-    double mapping [4 * MAX_NUM_CORES];            // Mapping structure: | test core ids | io pairs assigned | test frequency | preemptions |
+    double mapping[4 * MAX_NUM_CORES];             // Mapping structure: | test core ids | io pairs assigned | test frequency | preemptions |
     double testtime;                               // Test time required for testing all the cores with the current mapping
     double SNR;                                    // Worst case SNR generated at the time of testing
     double communication_cost;                     // Communication cost for the given mapping (number of active MRs * number of test packets)
     double fitness;                                // Fitness function value calculated for the given mapping
-    double lbest_mapping [4 * MAX_NUM_CORES];      // The mapping corresponding to the best fitness function value obtained this particle till now
+    double lbest_mapping[4 * MAX_NUM_CORES];       // The mapping corresponding to the best fitness function value obtained this particle till now
     double lbest_fitness;                          // The best fitness function value obtained this particle till now
-    Schedule_node *schedule;                       // Linked list containing start and end times of testing for the given particle
 } PSO_particle;
 
 // Global best particle
@@ -152,16 +150,31 @@ typedef struct {
     int swap_idx2;                                 // Index of the second element to be swapped 
 } Swap_operator;
 
-// CLAP input array
+// Sorted list of all starttimes and endtimes
+// (Used to create CLAP input list)
+
+struct _all_times {
+    double time;
+    struct _all_times *next;
+};
+
+typedef struct _all_times All_times;
+
+// CLAP input list
 
 typedef struct {
     int source_x;
     int source_y;
-    int destination_x;
+    int destination_x
     int destination_y;
-    int valid_bit;
-} CLAP_input;
+} Test_signals
 
+struct _clap_inputs {
+    Test_signals test_signals[2 * MAX_IO_PAIRS];
+    struct _clap_inputs *next;
+};
+
+typedef struct _clap_inputs Clap_inputs;
 
 // Function declarations
 
@@ -175,35 +188,56 @@ void configure_io_pairs (FILE* in_file, IO_pairs *io_pairs, NoC_node *noc_nodes,
 // Reads the number of test patterns and scan chain lengths for each test core from the file and stores this info in node struct array
 void read_test_core_parameters (FILE* in_file, IO_pairs *io_pairs, NoC_node *noc_nodes, int num_cores, int num_test_cores);
 
-// Initializes PSO particles by initializing the solution vector fields and calculating the resulting fitnessAlso initializes the local and global best particles for this stage 
-void init_pso_particles (PSO_particle *pso_particle, Gbest_PSO_particle *gbest_pso_particle, NoC_node *noc_nodes, int num_cores, /*double *freq, int num_freq,*/ IO_pairs *io_pairs, int num_io_pairs, int N_columns);
+// Finds testtime for the given mapping assuming there are no resource conflicts involved (XY routing, circuit switching)
+double find_individual_testtime (NoC_node *noc_nodes, int input_core, int output_core, int test_core, double frequency, double preemption_point);
+
+// Finds the communication cost for a given PSO particle mapping --> consider hops (circuit switching scenario) --> use testtime (non-preemptive, single frequency)
+void find_communication_cost (PSO_particle *pso_particle, NoC_node *noc_nodes, int num_cores, IO_pairs *io_pairs, int num_io_pairs);
+
+// Creates an EMPTY Schedule list
+// Schedule_head *create_schedule_list ();
+
+// Update Schedule linked lists
+// void update_schedule_list (Schedule_head *head, double starttime, double endtime);
+
+void update_times_list (All_times **head, double time);
+IO_head *create_IO_list_head ();
+void update_IO_list (IO_head *head, double starttime, double endtime, int testcore);
+void create_clap_input_list (Clap_inputs_head *head, IO_pairs *io_pairs, int num_io_pairs);
 
 // Populates the resource matrix with busytimes for all resources [links and router ports] in accordance with the XY-routing algorithm
 void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, int N_columns, int num_cores, IO_pairs *io_pairs, int num_io_pairs);
 
-// Finds the particle fitness = w.testtime + (1-w).SNR -- w optimal, as testtime increases and SNR decreases
+// Initializes PSO particles by initializing the I/O core, frequencies and test core mapping; calculates the fitness value for each particle 
+void init_pso_particles (PSO_particle *pso_particle, Gbest_PSO_particle *gbest_pso_particle, NoC_node *noc_nodes, int num_cores, double *freq, int num_freq, IO_pairs *io_pairs, int num_io_pairs, int N_columns);
 
-// Generates a random number between 0 and 1 (uniform distribution)
+// Generates random number between 0 and 1 (probability distribution: uniform)
+double generate_random_number ();
 
-// Swaps io pairs in arrays a and b with given probability
+// Swaps io pairs with given probability 
 void swap_io_pair (int num_test_cores, double *a, double *b, double probability);
 
-// Swaps frequencies in arrays a and b with given probability
+// Checks frequency validity for newly assigned test core, swaps frequencies
 void swap_frequencies (int num_test_cores, double *a, double *b, double probability);
 
-// Generates a sequence of swap operators for evolving a given particle's test core sequence 
+// Generates a sequence of swap operators for evolving a given particle's test core sequence
 int generate_swap_operator_sequence (int num_test_cores, double *a, double *b, Swap_operator* swap_operator);
 
+// Applies the sequence of swap operators on test core sequence a with give probability
+void swap_test_core_sequence (int num_test_cores, double *a, Swap_operator* swap_operator, int num_swap_operators, double probability);
+
 // Modifies the preemption points for test cores in a given particle (new position of a particle in continuous PSO)
-void modify_preemption_points (int num_test_cores, double *a, double *b, double *c);
+// void modify_preemption_points (int num_test_cores, double *a, double *b, double *c);
 
-// Simulates Particle Swarm Optimization algorithm to find the mapping with minimum cost
-void particle_swarm_optimization(NoC_node *noc_nodes, int num_cores, int M_rows, double *freq, int num_freq, IO_pairs *io_pairs, int num_io_pairs);
+// Simulates Particle Swarm Optimization algorithm to determine the mapping with minimum cost
+void particle_swarm_optimization (NoC_node *noc_nodes, int num_cores, int M_rows, double *freq, int num_freq, IO_pairs *io_pairs, int num_io_pairs);
 
-// Utility function to print PSO particles' info
+// Finds the maximum of two given numbers
+double max (double a, double b);
+
+// Prints the mapping and test schedule information for all PSO particles
 void print_pso_particle_info (PSO_particle *pso_particle, int num_test_cores);
 
-// Utility function to print global best particle's info
+// Prints the mapping and test schedule information for the global best PSO particle
 void print_global_best_info (Gbest_PSO_particle *gbest_pso_particle, int num_test_cores);
-
 

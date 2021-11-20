@@ -34,6 +34,7 @@ void configure_io_pairs (FILE* in_file, IO_pairs *io_pairs, NoC_node *noc_nodes,
         io_pairs[i].io_pair_no = i + 1;
         io_pairs[i].input_core_no = temp_in;
         io_pairs[i].output_core_no = temp_out;
+        io_pairs[i].io_head = create_IO_list_head();
     }
 }
 
@@ -48,7 +49,7 @@ void read_test_core_parameters (FILE* in_file, IO_pairs *io_pairs, NoC_node *noc
     }
 }
 
-// Finds testtime for the given mapping assuming there are no resource conflicts involved
+// Finds testtime for the given mapping assuming there are no resource conflicts involved (XY routing, circuit switching)
 
 double find_individual_testtime (NoC_node *noc_nodes, int input_core, int output_core, int test_core, double frequency, double preemption_point) {
     int hop_length_ic = 0;        // Distance in terms of hops from input core to test core
@@ -112,83 +113,79 @@ void find_communication_cost (PSO_particle *pso_particle, NoC_node *noc_nodes, i
     }
 }
 
-double max (double a, double b) {
-    if (a >= b)
-        return a;
-    else 
-        return b;
+void update_times_list (All_times **head, double time) {
+    All_times* temp;
+    All_times* new_node = (All_times*) malloc (sizeof (All_times));
+    new_node->time = time;
+
+    if (*head == NULL || (*head)->time >= new_node->time) {
+        new_node->next = *head;
+        *head = new_node;
+    }
+    else {
+        while (temp->next != NULL && temp->next->time < new_node->time)
+            temp = temp->next;
+        new_node->next = temp->next;
+        temp->next = new_node;   
+    }
 }
 
-// Creates an EMPTY Schedule list
+// Creates an EMPTY IO Schedule list
 
-// Schedule_head *create_schedule_list () {
+IO_head *create_IO_list_head () {
 
-//     // Allocate memory for the head struct
-//     Schedule_head *head;
-//     head = (Schedule_head *) malloc (sizeof (Schedule_head));
+    // Allocate memory for the head struct
+    IO_head *head;
+    head = (IO_head *) malloc (sizeof (IO_head));
+    
+    // Initialize queue parameters
+    head->head_node = NULL;                       // Initialize head node pointer as NULL
+    head->size = 0;                               // Initialize list size to 0
+    
+    // Return pointer to run queue head
+    return head;
+}
 
-//     // Initialize queue parameters
-//     head->head_node = NULL;                       // Initialize head node pointer as NULL
-//     head->min_time = 0.0;                         // Initialize min time of the list to 0.0
-//     head->max_time = 0.0;                         // Initialize max time of the list to 0.0
+void update_IO_list (IO_head *head, double starttime, double endtime, int test_core) {
 
-//     // Return pointer to run queue head
-//     return head;
-// }
+    IO_node* temp;
+    IO_node* new_node = (IO_node*) malloc (sizeof (IO_node));
+    new_node->starttime = starttime;
+    new_node->endtime = endtime;
+    new_node->test_core = test_core;
 
-// Update Schedule linked lists
-
-// void update_schedule_list (Schedule_head *head, double starttime, double pso_particle->schedule->endtime) {
-//     Schedule_node *temp;
-
-//     // Allocate memory for the node
-//     Schedule_node *add_node;
-//     add_node = (Schedule_node *) malloc (sizeof (Schedule_node));
-
-//     // Populate node entries
-//     add_node->starttime = starttime;
-//     add_node->pso_particle->schedule->endtime = pso_particle->schedule->endtime;
-//     add_node->next = NULL;
-
-//     // Add node to the list
-//     if (head != NULL) {
-
-//         // Add node to the head of the list, and update min_time, max_time
-//         if (head->head_node == NULL) {
-//             head->head_node = add_node;
-//             head->min_time = add_node->starttime;
-//             head->max_time = add_node->pso_particle->schedule->endtime;
-//         }
-
-//         // Add node to the list, and update max_time
-//         else {
-//             temp = head->head_node;
-//             while (temp->next != NULL)
-//                 temp = temp->next;
-//             temp->next = add_node;
-//             head->max_time = add_node->pso_particle->schedule->endtime;
-//         }
-//     }
-// }
+    if (*head == NULL) {
+        new_node->next = *head;
+        *head = new_node;
+    }
+    else {
+        while (temp->next != NULL)
+            temp = temp->next;
+        new_node->next = temp->next;
+        temp->next = new_node;
+    }
+}
 
 // Populates the resource matrix with busytimes for all resources [links and router ports] in accordance with the XY-routing algorithm
 
 void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, int N_columns, int num_cores, IO_pairs *io_pairs, int num_io_pairs) {
 
-    int num_test_cores = num_cores - (2 * num_io_pairs);    // Number of test cores in the NoC mesh network
-    Resource resource_matrix[num_cores][num_cores];         // Resource matrix contains staus and busytime info 
-    double individual_testtime = 0.0;                       // Individual testtime for a given test core assuming no resource conflicts
-    int test_core = 0;                                      // Temporary variable to store test core number
-    int input_core = 0;                                     // Temporary variable to store input core number
-    int output_core = 0;                                    // Temporary variable to store output core number
-    double frequency = 0.0;                                 // Temporary variable to store test frequency
-    double preemption = 0.0;                                // Temporary variable to store preemption point
-    int ic_core = 0;                                        // Stores the intermediate core obtained after matching x coordinates of input core and test core
-    int co_core = 0;                                        // Stores the intermediate core obtained after matching x coordinates of test core and output core 
-    double max_busytime = 0.0;                              // Maximum busytime for all resources conflicting with the given input/output port
-    int xrouting_port_ic = -1;                              // Temporary variable to store the (EAST/WEST) routing port used at the last core after X routing
-    int xrouting_port_co = -1;                              // Temporary variable to store the (EAST/WEST) routing port used at the last core after X routing
-    
+    int num_test_cores = num_cores - (2 * num_io_pairs);            // Number of test cores in the NoC mesh network
+    Resource resource_matrix[num_cores][num_cores];                 // Resource matrix contains staus and busytime info (FIXME: could cause segmentation fault)
+    double individual_testtime = 0.0;                               // Individual testtime for a given test core assuming no resource conflicts
+    int test_core = 0;                                              // Temporary variable to store test core number
+    int input_core = 0;                                             // Temporary variable to store input core number
+    int output_core = 0;                                            // Temporary variable to store output core number
+    double frequency = 0.0;                                         // Temporary variable to store test frequency
+    double preemption = 0.0;                                        // Temporary variable to store preemption point
+    int ic_core = 0;                                                // Stores the intermediate core obtained after matching x coordinates of input core and test core
+    int co_core = 0;                                                // Stores the intermediate core obtained after matching x coordinates of test core and output core 
+    double max_busytime = 0.0;                                      // Maximum busytime for all resources conflicting with the given input/output port
+    int xrouting_port_ic = -1;                                      // Temporary variable to store the (EAST/WEST) routing port used at the last core after X routing
+    int xrouting_port_co = -1;                                      // Temporary variable to store the (EAST/WEST) routing port used at the last core after X routing
+    All_times *times_head = NULL; 
+    int io_pair = 0;
+
     // Initializing the resource matrix
     for (int i = 0; i < num_cores; i++) {
         for (int j = 0; j < num_cores; j++) {
@@ -204,15 +201,18 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
         }
     }
 
-    pso_particle->schedule->starttime = 0.0;
-    pso_particle->schedule->endtime = 0.0;
+    for (int i = 0; i < num_test_cores; i++) {
+        pso_particle->schedule[i].starttime = 0.0;
+        pso_particle->schedule[i].endtime = 0.0;
+    }
 
     // Populating resource matrix with busytime (latest time till which the resource is busy) for all test cores
     for (int i = 0; i < num_test_cores; i++) {
 
         test_core = (int)pso_particle->mapping[i];
-        input_core = io_pairs[(int)(pso_particle->mapping[i + num_test_cores]) - 1].input_core_no;
-        output_core = io_pairs[(int)(pso_particle->mapping[i + num_test_cores]) - 1].output_core_no;
+        io_pair = (int)(pso_particle->mapping[i + num_test_cores]);
+        input_core = io_pairs[io_pair - 1].input_core_no;
+        output_core = io_pairs[io_pair - 1].output_core_no;
         frequency = pso_particle->mapping[i + (2 * num_test_cores)];
         preemption = pso_particle->mapping[i + (3 * num_test_cores)];
 
@@ -230,7 +230,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             // Update LINK busytimes between the input core and its adjacent core (link direction +x)
             resource_matrix[input_core - 1][input_core].busytime += individual_testtime;
 
-            pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[input_core - 1][input_core].busytime);
+            // Update test endtime
+            pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[input_core - 1][input_core].busytime);
 
             // Update ROUTER busytimes and statuses (routing direction +x i.e. input port INJECTION to output port EAST)
             max_busytime = max (resource_matrix[input_core - 1][input_core - 1].busyports[EAST][INPUT].busytime, resource_matrix[input_core - 1][input_core - 1].busyports[INJECTION][OUTPUT].busytime);
@@ -241,7 +242,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             if (resource_matrix[input_core - 1][input_core - 1].busytime < max_busytime + individual_testtime)
                 resource_matrix[input_core - 1][input_core - 1].busytime = max_busytime + individual_testtime;
 
-            pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[input_core - 1][input_core - 1].busytime);
+            // Update test endtime
+            pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[input_core - 1][input_core - 1].busytime);
 
             // From (input core + 1) to (input core + (difference in x-coordinates - 1))
             // * Index of input core + 1 is input_core
@@ -250,7 +252,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 // Update LINK busytimes between adjacent cores (link direction +x)
                 resource_matrix[input_core + j][input_core + j + 1].busytime += individual_testtime;
 
-                pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[input_core + j][input_core + j + 1].busytime);
+                // Update test endtime
+                pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[input_core + j][input_core + j + 1].busytime);
 
                 // Update ROUTER busytimes and statuses (routing direction +x i.e. input port WEST to output port EAST)
                 max_busytime = max (resource_matrix[input_core + j][input_core + j].busyports[EAST][INPUT].busytime, resource_matrix[input_core + j][input_core + j].busyports[WEST][OUTPUT].busytime);
@@ -261,7 +264,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 if (resource_matrix[input_core + j][input_core + j].busytime < max_busytime + individual_testtime)
                     resource_matrix[input_core + j][input_core + j].busytime = max_busytime + individual_testtime;
 
-                pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[input_core + j][input_core + j].busytime);
+                // Update test endtime
+                pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[input_core + j][input_core + j].busytime);
             }
         }
 
@@ -273,7 +277,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             // Update LINK busytimes between the test core and its adjacent core (link direction -x)
             resource_matrix[input_core - 1][input_core - 2].busytime += individual_testtime;
 
-            pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[input_core - 1][input_core - 2].busytime);
+            // Update test endtime
+            pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[input_core - 1][input_core - 2].busytime);
 
             // Update ROUTER busytimes and statuses (routing direction -x i.e. input port INJECTION to output port WEST)
             max_busytime = max (resource_matrix[input_core - 1][input_core - 1].busyports[WEST][INPUT].busytime, resource_matrix[input_core - 1][input_core - 1].busyports[INJECTION][OUTPUT].busytime);
@@ -284,7 +289,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             if (resource_matrix[input_core - 1][input_core - 1].busytime < max_busytime + individual_testtime)
                 resource_matrix[input_core - 1][input_core - 1].busytime = max_busytime + individual_testtime;
 
-            pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[input_core - 1][input_core - 1].busytime);
+            // Update test endtime
+            pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[input_core - 1][input_core - 1].busytime);
 
             // From (input core - 1) to (input core - (difference in x-coordinates - 1))
             // * Index of input core - 1 is input_core - 2
@@ -293,7 +299,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                // Update link busytimes between adjacent cores (link direction -x)
                resource_matrix[input_core - j - 2][input_core - j - 3].busytime += individual_testtime;
 
-               pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[input_core - j - 2][input_core - j - 3].busytime);
+               // Update test endtime
+               pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[input_core - j - 2][input_core - j - 3].busytime);
 
                // Update ROUTER busytimes and statuses (routing direction -x i.e. input port EAST to output port WEST)
                max_busytime = max (resource_matrix[input_core - j - 2][input_core - j - 2].busyports[WEST][INPUT].busytime, resource_matrix[input_core - j - 2][input_core - j - 2].busyports[EAST][OUTPUT].busytime);
@@ -304,7 +311,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                if (resource_matrix[input_core - j - 2][input_core - j - 2].busytime < max_busytime + individual_testtime)
                    resource_matrix[input_core - j - 2][input_core - j - 2].busytime = max_busytime + individual_testtime;
 
-               pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[input_core - j - 2][input_core - j - 2].busytime);
+               // Update test endtime
+               pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[input_core - j - 2][input_core - j - 2].busytime);
             }
         }
                 
@@ -319,7 +327,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             // Update LINK busytimes between the test core and its adjacent core (link direction +x)
             resource_matrix[test_core - 1][test_core].busytime += individual_testtime;
 
-            pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[test_core - 1][test_core].busytime);
+            // Update test endtime
+            pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[test_core - 1][test_core].busytime);
 
             // Update ROUTER busytimes and statuses (routing direction +x i.e. input port INJECTION to output port EAST)
             max_busytime = max (resource_matrix[test_core - 1][test_core - 1].busyports[EAST][INPUT].busytime, resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].busytime);
@@ -330,7 +339,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             if (resource_matrix[test_core - 1][test_core - 1].busytime < max_busytime + individual_testtime)
                 resource_matrix[test_core - 1][test_core - 1].busytime = max_busytime + individual_testtime;
 
-            pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[test_core - 1][test_core - 1].busytime);
+            // Update test endtime
+            pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[test_core - 1][test_core - 1].busytime);
 
             // From (test core + 1) to (test core + (difference in x-coordinates - 1))
             // * Index of test core + 1 is input_core
@@ -339,7 +349,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 // Update LINK busytimes between adjacent cores (link direction +x)
                 resource_matrix[test_core + j][test_core + j + 1].busytime += individual_testtime;
 
-                pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[test_core + j][test_core + j + 1].busytime);
+                // Update test endtime
+                pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[test_core + j][test_core + j + 1].busytime);
 
                 // Update ROUTER busytimes and statuses (routing direction +x i.e. input port WEST to output port EAST)
                 max_busytime = max (resource_matrix[test_core + j][test_core + j].busyports[EAST][INPUT].busytime, resource_matrix[test_core + j][test_core + j].busyports[WEST][OUTPUT].busytime);
@@ -350,7 +361,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 if (resource_matrix[test_core + j][test_core + j].busytime < max_busytime + individual_testtime)
                     resource_matrix[test_core + j][test_core + j].busytime = max_busytime + individual_testtime;
 
-                pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[test_core + j][test_core + j].busytime);
+                // Update test endtime
+                pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[test_core + j][test_core + j].busytime);
             }
         }
 
@@ -362,7 +374,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
            // Update LINK busytimes between the test core and its adjacent core (link direction -x)
            resource_matrix[test_core - 1][test_core - 2].busytime += individual_testtime;
 
-           pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[test_core - 1][test_core - 2].busytime);
+           // Update test endtime
+           pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[test_core - 1][test_core - 2].busytime);
 
            // Update ROUTER busytimes and statuses (routing direction -x i.e. input port INJECTION to output port WEST)
            max_busytime = max (resource_matrix[test_core - 1][test_core - 1].busyports[WEST][INPUT].busytime, resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].busytime);
@@ -373,7 +386,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
            if (resource_matrix[test_core - 1][test_core - 1].busytime < max_busytime + individual_testtime)
                resource_matrix[test_core - 1][test_core - 1].busytime = max_busytime + individual_testtime;
 
-           pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[test_core - 1][test_core - 1].busytime);
+           // Update test endtime
+           pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[test_core - 1][test_core - 1].busytime);
 
            // From (test core - 1) to (test core - (difference in x-coordinates - 1))
            // * Index of test core - 1 is input_core - 2
@@ -382,7 +396,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                // Update link busytimes between adjacent cores (link direction -x)
                resource_matrix[test_core - j - 2][test_core - j - 3].busytime += individual_testtime;
 
-               pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[test_core - j - 2][test_core - j - 3].busytime);
+               // Update test endtime
+               pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[test_core - j - 2][test_core - j - 3].busytime);
 
                // Update ROUTER busytimes and statuses (routing direction -x i.e. input port EAST to output port WEST)
                max_busytime = max (resource_matrix[test_core - j - 2][test_core - j - 2].busyports[WEST][INPUT].busytime, resource_matrix[test_core - j - 2][test_core - j - 2].busyports[EAST][OUTPUT].busytime);
@@ -393,7 +408,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                if (resource_matrix[test_core - j - 2][test_core - j - 2].busytime < max_busytime + individual_testtime)
                    resource_matrix[test_core - j - 2][test_core - j - 2].busytime = max_busytime + individual_testtime;
 
-               pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[test_core - j - 2][test_core - j - 2].busytime);
+               // Update test endtime
+               pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[test_core - j - 2][test_core - j - 2].busytime);
             }
         }
                 
@@ -412,7 +428,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             // Update LINK busytimes between the input core and its adjacent core (link direction +y)
             resource_matrix[ic_core - 1][ic_core - 1 + N_columns].busytime += individual_testtime;
 
-            pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[ic_core - 1][ic_core - 1 + N_columns].busytime);
+            // Update test endtime
+            pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[ic_core - 1][ic_core - 1 + N_columns].busytime);
 
             // Update ROUTER busytimes and statuses (routing direction +y i.e. input port EAST/WEST (xrouting_port_ic) to output port NORTH)
             max_busytime = max (resource_matrix[ic_core - 1][ic_core - 1].busyports[NORTH][INPUT].busytime, resource_matrix[ic_core - 1][ic_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime);
@@ -423,7 +440,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             if (resource_matrix[ic_core - 1][ic_core - 1].busytime < max_busytime + individual_testtime)
                 resource_matrix[ic_core - 1][ic_core - 1].busytime = max_busytime + individual_testtime;
 
-            pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[ic_core - 1][ic_core - 1].busytime);
+            // Update test endtime
+            pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[ic_core - 1][ic_core - 1].busytime);
 
             // From (intermediate core + N columns) to (intermediate core + N columns * (difference in y-coordinates - 1))
             // * Index of intermediate core + N columns is intermediate_core - 1 + N columns
@@ -432,7 +450,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 // Update LINK busytimes between adjacent cores (link direction +y)
                 resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 2) * N_columns].busytime += individual_testtime;
 
-                pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 2) * N_columns].busytime);
+                // Update test endtime
+                pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 2) * N_columns].busytime);
 
                 // Update ROUTER busytimes and statuses (routing direction +y i.e. input port EAST/WEST (xrouting_port_ic) to output port NORTH))
                 max_busytime = max (resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[NORTH][INPUT].busytime, resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].busytime);
@@ -443,7 +462,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 if (resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busytime < max_busytime + individual_testtime)
                     resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busytime = max_busytime + individual_testtime;
 
-                pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busytime);
+                // Update test endtime
+                pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busytime);
             }
         } 
 
@@ -453,7 +473,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             // Update LINK busytimes between the input core and its adjacent core (link direction -y)
             resource_matrix[ic_core - 1][ic_core - 1 - N_columns].busytime += individual_testtime;
 
-            pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[ic_core - 1][ic_core - 1 - N_columns].busytime);
+            // Update test endtime
+            pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[ic_core - 1][ic_core - 1 - N_columns].busytime);
 
             // Update ROUTER busytimes and statuses (routing direction -y i.e. input port EAST/WEST (xrouting_port_ic) to output port SOUTH)
             max_busytime = max (resource_matrix[ic_core - 1][ic_core - 1].busyports[SOUTH][INPUT].busytime, resource_matrix[ic_core - 1][ic_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime);
@@ -464,7 +485,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             if (resource_matrix[ic_core - 1][ic_core - 1].busytime < max_busytime + individual_testtime)
                 resource_matrix[ic_core - 1][ic_core - 1].busytime = max_busytime + individual_testtime;
 
-            pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[ic_core - 1][ic_core - 1].busytime);
+            // Update test endtime
+            pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[ic_core - 1][ic_core - 1].busytime);
 
             // From (intermediate core - N columns) to (intermediate core - N columns * (difference in y-coordinates - 1))
             // * Index of intermediate core - N columns is intermediate_core - 1 - N columns
@@ -473,7 +495,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 // Update LINK busytimes between adjacent cores (link direction -y)
                 resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 2) * N_columns].busytime += individual_testtime;
 
-                pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 2) * N_columns].busytime);
+                // Update test endtime
+                pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 2) * N_columns].busytime);
 
                 // Update ROUTER busytimes and statuses (routing direction +y i.e. input port EAST/WEST (xrouting_port_ic) to output port SOUTH))
                 max_busytime = max (resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[SOUTH][INPUT].busytime, resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].busytime);
@@ -484,7 +507,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 if (resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busytime < max_busytime + individual_testtime)
                     resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busytime = max_busytime + individual_testtime;
 
-                pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busytime);
+                // Update test endtime
+                pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busytime);
             }
         }
 
@@ -494,7 +518,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             // Update LINK busytimes between the input core and its adjacent core (link direction +y)
             resource_matrix[co_core - 1][co_core - 1 + N_columns].busytime += individual_testtime;
 
-            pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[co_core - 1][co_core - 1 + N_columns].busytime);
+            // Update test endtime
+            pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[co_core - 1][co_core - 1 + N_columns].busytime);
 
             // Update ROUTER busytimes and statuses (routing direction +y i.e. input port EAST/WEST (xrouting_port_ic) to output port NORTH)
             max_busytime = max (resource_matrix[co_core - 1][co_core - 1].busyports[NORTH][INPUT].busytime, resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime);
@@ -505,7 +530,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             if (resource_matrix[co_core - 1][co_core - 1].busytime < max_busytime + individual_testtime)
                 resource_matrix[co_core - 1][co_core - 1].busytime = max_busytime + individual_testtime;
 
-            pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[co_core - 1][co_core - 1].busytime);
+            // Update test endtime
+            pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[co_core - 1][co_core - 1].busytime);
 
             // From (intermediate core + N columns) to (intermediate core + N columns * (difference in y-coordinates - 1))
             // * Index of intermediate core + N columns is intermediate_core - 1 + N columns
@@ -514,7 +540,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 // Update LINK busytimes between adjacent cores (link direction +y)
                 resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 2) * N_columns].busytime += individual_testtime;
 
-                pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 2) * N_columns].busytime);
+                // Update test endtime
+                pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 2) * N_columns].busytime);
 
                 // Update ROUTER busytimes and statuses (routing direction +y i.e. input port EAST/WEST (xrouting_port_ic) to output port NORTH))
                 max_busytime = max (resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[NORTH][INPUT].busytime, resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].busytime);
@@ -525,7 +552,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 if (resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busytime < max_busytime + individual_testtime)
                     resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busytime = max_busytime + individual_testtime;
 
-                pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busytime);
+                // Update test endtime
+                pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busytime);
             }
         }
 
@@ -535,7 +563,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             // Update LINK busytimes between the input core and its adjacent core (link direction -y)
             resource_matrix[co_core - 1][co_core - 1 - N_columns].busytime += individual_testtime;
 
-            pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[co_core - 1][co_core - 1 - N_columns].busytime);
+            // Update test endtime
+            pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[co_core - 1][co_core - 1 - N_columns].busytime);
 
             // Update ROUTER busytimes and statuses (routing direction -y i.e. input port EAST/WEST (xrouting_port_ic) to output port SOUTH)
             max_busytime = max (resource_matrix[co_core - 1][co_core - 1].busyports[SOUTH][INPUT].busytime, resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime);
@@ -546,7 +575,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             if (resource_matrix[co_core - 1][co_core - 1].busytime < max_busytime + individual_testtime)
                 resource_matrix[co_core - 1][co_core - 1].busytime = max_busytime + individual_testtime;
 
-            pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[co_core - 1][co_core - 1].busytime);
+            // Update test endtime
+            pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[co_core - 1][co_core - 1].busytime);
 
             // From (intermediate core - N columns) to (intermediate core - N columns * (difference in y-coordinates - 1))
             // * Index of intermediate core - N columns is intermediate_core - 1 - N columns
@@ -555,7 +585,8 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 // Update LINK busytimes between adjacent cores (link direction -y)
                 resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 2) * N_columns].busytime += individual_testtime;
 
-                pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 2) * N_columns].busytime);
+                // Update test endtime
+                pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 2) * N_columns].busytime);
 
                 // Update ROUTER busytimes and statuses (routing direction +y i.e. input port EAST/WEST (xrouting_port_ic) to output port SOUTH))
                 max_busytime = max (resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[SOUTH][INPUT].busytime, resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].busytime);
@@ -566,9 +597,14 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 if (resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busytime < max_busytime + individual_testtime)
                     resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busytime = max_busytime + individual_testtime;
 
-                pso_particle->schedule->endtime = max(pso_particle->schedule->endtime, resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busytime);
+                // Update test endtime
+                pso_particle->schedule[i].endtime = max(pso_particle->schedule[i].endtime, resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busytime);
             }
         }
+        pso_particle->schedule[i].starttime = pso_particle->schedule[i].endtime - individual_testtime;
+        update_times_list(&times_head, pso_particle->schedule[i].starttime);
+        update_times_list(&times_head, pso_particle->schedule[i].endtime);
+        update_IO_list(io_pairs[io_pair - 1].io_head, starttime, endtime, test_core);
     }
 
     // Printing the resource matrix with calculated busytimes
@@ -582,14 +618,62 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
         printf(" |\n\n");
     }
 
-    // w * MR * test packets + () * SNR
-
     printf(" Total testtime for given mapping: %lf\n", pso_particle->testtime);
 }
 
-// Initialize PSO particles
+// void create_clap_input_list (Clap_inputs_head *head, IO_pairs *io_pairs, int num_io_pairs) {
+    // Clap_list *temp = *head;
 
-void init_pso_particles (PSO_particle *pso_particle, Gbest_PSO_particle *gbest_pso_particle, NoC_node *noc_nodes, int num_cores, /*double *freq, int num_freq,*/ IO_pairs *io_pairs, int num_io_pairs, int N_columns) {
+    // new_node->next = NULL;
+
+    // if (*head == NULL) {
+    //     Clap_list *new_node = (Clap_list*) malloc (sizeof (Clap_list));
+    //     *head = new_node;
+    //     new_node->clap_inputs[io_pair - 1].starttime = starttime;
+    //     new_node->clap_inputs[io_pair - 1].endtime = endtime;
+    //     new_node->clap_inputs[io_pair - 1].input_core = input_core;
+    //     new_node->clap_inputs[io_pair - 1].test_core = test_core;
+    //     new_node->clap_inputs[io_pair - 1].output_core = output_core;
+    //     new_node->clap_inputs[io_pair - 1].filled = FILLED;
+    // }
+    // else {
+    //     while (temp->next != NULL) {
+    //         for (int i = 0; i < num_io_pairs; i++){
+    //             if (new_node->clap_inputs[i].starttime < new_node->clap_inputs[io_pair - 1].starttime)
+    //         }
+    //         temp = temp->next;
+    //     }
+    // }
+// }
+
+double calculate_worst_case_SNR (PSO_particle *pso_particle, NoC_node *noc_nodes, int N_columns, int num_cores, IO_pairs *io_pairs, int num_io_pairs) {
+    int num_test_cores = num_cores - (2 * num_io_pairs);    // Number of test cores in the NoC mesh network
+    int test_core = 0;                                      // Temporary variable to store test core number
+    int input_core = 0;                                     // Temporary variable to store input core number
+    int output_core = 0;                                    // Temporary variable to store output core number
+    double starttime = 0.0;                                 // Temporary variable to store test starttime
+    double endtime = 0.0;                                   // Temporary variable to store test endtime
+    int io_pair = 0;
+    Clap_list *head = NULL;                                 // First node of the clap inputs list
+
+    // Populating resource matrix with busytime (latest time till which the resource is busy) for all test cores
+    for (int i = 0; i < num_test_cores; i++) {
+
+        test_core = (int)pso_particle->mapping[i];
+        input_core = io_pairs[(int)(pso_particle->mapping[i + num_test_cores]) - 1].input_core_no;
+        output_core = io_pairs[(int)(pso_particle->mapping[i + num_test_cores]) - 1].output_core_no;
+        io_pair = (int)(pso_particle->mapping[i + num_test_cores]);
+        starttime = pso_particle->schedule[i].starttime;
+        endtime = pso_particle->schedule[i].endtime;
+        
+        update_clap_input_list (&head, starttime, endtime, input_core, test_core, output_core, num_io_pairs, io_pair);     
+
+        // CALL CLAP FUNCTIONS
+}
+
+// Initializes PSO particles by initializing the I/O core, frequencies and test core mapping; calculates the fitness value for each particle
+
+void init_pso_particles (PSO_particle *pso_particle, Gbest_PSO_particle *gbest_pso_particle, NoC_node *noc_nodes, int num_cores, double *freq, int num_freq, IO_pairs *io_pairs, int num_io_pairs, int N_columns) {
 
     int num_test_cores = num_cores - (2 * num_io_pairs);       // Number of test cores in the NoC mesh network
     int *temp_arr;                                             // Temporary array to store test core ids
@@ -615,7 +699,6 @@ void init_pso_particles (PSO_particle *pso_particle, Gbest_PSO_particle *gbest_p
 
         // Create schedule lists for all particles
         // pso_particle[p].schedule = create_schedule_list();
-        pso_particle[p].schedule = malloc (sizeof (Schedule_node));
 
         // Initialize mapping  
         // mapping  structure: | test core ids | io pairs assigned | test frequency | preemptions |
@@ -639,17 +722,20 @@ void init_pso_particles (PSO_particle *pso_particle, Gbest_PSO_particle *gbest_p
         for (j = num_test_cores; j < (2 * num_test_cores); j++)
             pso_particle[p].mapping[j] = (rand() % num_io_pairs) + 1;
 
-        // Randomly assign a 'valid' test frequency   
-        for (j = (2 *num_test_cores); j < (3 * num_test_cores); j++)
-            pso_particle[p].mapping[j] = 1.0; // freq[(rand() % num_freq)];
+        // Randomly assign a valid test frequency   
+        for (j = (2 *num_test_cores); j < (3 * num_test_cores); j++) {
+            pso_particle[p].mapping[j] = freq[(rand() % num_freq)];
+        }
 
         // Assign preemption points - randomly generated value between 0 and 1
         for (j = 3 * num_test_cores; j < (4 * num_test_cores); j++)
-            pso_particle[p].mapping[j] = 1.0; // drand48 () * 0.9 + 0.1;
+            pso_particle[p].mapping[j] = drand48 () * 0.9 + 0.1;
 
         find_resource_busytimes (pso_particle, noc_nodes, N_columns, num_cores, io_pairs, num_io_pairs);
+        // find SNR
+        // fitness = w * (testtime) + (1 - w) * SNR;
 
-        // Updating the best fitness and the corresponding particle index        
+        // Updating the best fitness and the corresponding particle index
         if (best_fitness > pso_particle[p].fitness) {
             best_fitness = pso_particle[p].fitness;
             best_idx = p;
@@ -658,11 +744,11 @@ void init_pso_particles (PSO_particle *pso_particle, Gbest_PSO_particle *gbest_p
 
     // Set the local best parameters
     for (p = 0; p < NUM_PSO_PARTICLES; p++) {
-    
+
         // Local best mapping  - same as the initialized mapping 
         for (j = 0; j < 4 * num_test_cores; j++)
             pso_particle[p].lbest_mapping[j] = pso_particle[p].mapping[j];
-            
+
         // Local best fitness value - same as the fitness value calculated for initialized mappings
         pso_particle[p].lbest_fitness = pso_particle[p].fitness;
     }
@@ -793,49 +879,51 @@ void swap_test_core_sequence (int num_test_cores, double *a, Swap_operator* swap
 // Modifies the preemption points for test cores in a given particle 
 // (new position of a particle in continuous PSO)
 
-void modify_preemption_points (int num_test_cores, double *a, double *b, double *c) {
-    int c1 = 1;
-    int c2 = 1;
-    int i = 0;
-    double r1 = 0.0;
-    double r2 = 0.0;
+// void modify_preemption_points (int num_test_cores, double *a, double *b, double *c) {
+//     int c1 = 1;
+//     int c2 = 1;
+//     int i = 0;
+//     double r1 = 0.0;
+//     double r2 = 0.0;
 
-    for(i = (3 * num_test_cores); i < (4 * num_test_cores); i++) {	
-        r1 = drand48();
-        r2 = drand48();
+//     for(i = (3 * num_test_cores); i < (4 * num_test_cores); i++) {	
+//         r1 = drand48();
+//         r2 = drand48();
 
-        if(r1 > ALPHA && r2 > BETA) {
-            a[i] = a[i] + (c1 * r1 * fabs(b[i] - a[i])) + (c2 * r2 * fabs (c[i] - a[i]));
-                if (a[i] > 2.1f)
-                    a[i] = a[i] - 2;
-                if (a[i] > 2.0f)
-                    a[i] = a[i] - 1.9;
-                if (a[i] > 1.1f)
-                    a[i] = a[i] - 1;
-                if (a[i]>1.0f)
-                    a[i] = a[i] - 0.9;
-        }
+//         if(r1 > ALPHA && r2 > BETA) {
+//             a[i] = a[i] + (c1 * r1 * fabs(b[i] - a[i])) + (c2 * r2 * fabs (c[i] - a[i]));
+//                 if (a[i] > 2.1f)
+//                     a[i] = a[i] - 2;
+//                 if (a[i] > 2.0f)
+//                     a[i] = a[i] - 1.9;
+//                 if (a[i] > 1.1f)
+//                     a[i] = a[i] - 1;
+//                 if (a[i]>1.0f)
+//                     a[i] = a[i] - 0.9;
+//         }
 
-        else if (r1 > ALPHA && r2 < BETA) {
-            a[i] = a[i] + (c1 * r1 * fabs(b[i] - a[i]));
-            if (a[i]>1.1f)
-                a[i] = a[i] - 1;
-            if (a[i]>1.0f)
-                a[i] = a[i] - 0.9;
-        }
+//         else if (r1 > ALPHA && r2 < BETA) {
+//             a[i] = a[i] + (c1 * r1 * fabs(b[i] - a[i]));
+//             if (a[i]>1.1f)
+//                 a[i] = a[i] - 1;
+//             if (a[i]>1.0f)
+//                 a[i] = a[i] - 0.9;
+//         }
 
-        else if (r1 < ALPHA && r2 > BETA) {
-            a[i] = a[i] + (c2 * r2 * fabs(c[i] - a[i]));
-            if (a[i] > 1.1f)
-                a[i] = a[i] - 1;
-            if (a[i] > 1.0f)
-                a[i] = a[i] - 0.9;
-        }
-    }
-}
+//         else if (r1 < ALPHA && r2 > BETA) {
+//             a[i] = a[i] + (c2 * r2 * fabs(c[i] - a[i]));
+//             if (a[i] > 1.1f)
+//                 a[i] = a[i] - 1;
+//             if (a[i] > 1.0f)
+//                 a[i] = a[i] - 0.9;
+//         }
+//     }
+// }
+
 
 // Particle swarm optimization
-void particle_swarm_optimization(NoC_node *noc_nodes, int num_cores, int M_rows, double *freq, int num_freq, IO_pairs *io_pairs, int num_io_pairs) {
+
+void particle_swarm_optimization (NoC_node *noc_nodes, int num_cores, int M_rows, double *freq, int num_freq, IO_pairs *io_pairs, int num_io_pairs) {
     int N_columns = num_cores / M_rows;                                 // Number of columns in NoC mesh network
     int num_test_cores = num_cores - (2 * num_io_pairs);                // Number of test cores in the NoC mesh network
     int num_pso_runs = 0;                                               // Number of PSO runs
@@ -846,11 +934,11 @@ void particle_swarm_optimization(NoC_node *noc_nodes, int num_cores, int M_rows,
     Swap_operator swap_operator[num_test_cores];                        // Sequence of swap operators for a given particle
                                                                         // The swap operator exchanges the values at positions
                                                                         // (swap_idx1, swap_idx2) generate a new particle
-    int num_swap_operators = 0;                                         // Number of swap operators in the swap sequence
+    int num_swap_operations = 0;                                        // Number of swap operators in the swap sequence
 
 
     // Initializes the PSO particles with randomized mapping, calculates respective costs and sets the initial local and global best
-    init_pso_particles (pso_particle, (&gbest_pso_particle), noc_nodes, num_cores, /*freq, num_freq,*/ io_pairs, num_io_pairs, N_columns);
+    init_pso_particles (pso_particle, (&gbest_pso_particle), noc_nodes, num_cores, freq, num_freq, io_pairs, num_io_pairs, N_columns);
 
     print_pso_particle_info (pso_particle, num_test_cores);
     print_global_best_info ((&gbest_pso_particle), num_test_cores);
@@ -864,19 +952,35 @@ void particle_swarm_optimization(NoC_node *noc_nodes, int num_cores, int M_rows,
             swap_frequencies (num_test_cores, pso_particle[p].mapping, pso_particle[p].lbest_mapping, ALPHA);
             swap_frequencies (num_test_cores, pso_particle[p].mapping, gbest_pso_particle.gbest_mapping, BETA);
 
-            num_swap_operators = generate_swap_operator_sequence (num_test_cores, pso_particle[p].mapping, pso_particle[p].lbest_mapping, swap_operator);
+            num_swap_operations = generate_swap_operator_sequence (num_test_cores, pso_particle[p].mapping, pso_particle[p].lbest_mapping, swap_operator);
             swap_test_core_sequence (num_test_cores, pso_particle[p].mapping, swap_operator, num_swap_operators, ALPHA);
 
-            num_swap_operators = generate_swap_operator_sequence (num_test_cores, pso_particle[p].mapping, gbest_pso_particle.gbest_mapping, swap_operator);
+            num_swap_operations = generate_swap_operator_sequence (num_test_cores, pso_particle[p].mapping, gbest_pso_particle.gbest_mapping, swap_operator);
             swap_test_core_sequence (num_test_cores, pso_particle[p].mapping, swap_operator, num_swap_operators, BETA);
             
-            modify_preemption_points (num_test_cores, pso_particle[p].mapping, pso_particle[p].lbest_mapping, gbest_pso_particle.gbest_mapping);
+            // modify_preemption_points (num_test_cores, pso_particle[p].mapping, pso_particle[p].lbest_mapping, gbest_pso_particle.gbest_mapping);
         }    
     // }   
     print_pso_particle_info (pso_particle, num_test_cores);
     print_global_best_info((&gbest_pso_particle), num_test_cores);
 
 }
+
+
+// =================
+// UTILITY FUNCTIONS
+// =================
+
+// Finds the maximum of two given numbers
+
+double max (double a, double b) {
+    if (a >= b)
+        return a;
+    else 
+        return b;
+}
+
+// Prints the mapping and test schedule information for all PSO particles
 
 void print_pso_particle_info (PSO_particle *pso_particle, int num_test_cores) {
     int p = 0;
@@ -902,13 +1006,17 @@ void print_pso_particle_info (PSO_particle *pso_particle, int num_test_cores) {
         for (i = (3 * num_test_cores); i < (4 * num_test_cores); i++)
             printf(" %.2lf\t", pso_particle[p].mapping[i]);
 
-        printf("\n Particle test time: %.2lf to %.2lf", pso_particle[p].schedule->starttime, pso_particle[p].schedule->endtime);
-        printf("\n\n");
+
+        printf("\n Particle schedule: \n");
+        for (i = 0; i < num_test_cores; i++)
+            printf(" %.2lf, %.2lf\t", pso_particle[p].schedule[i].starttime, pso_particle[p].schedule[i].endtime);
 
         printf("\n Particle fitness: %.2lf", pso_particle[p].fitness);
         printf("\n\n"); 
     }
 }
+
+// Prints the mapping and test schedule information for the global best PSO particle
 
 void print_global_best_info (Gbest_PSO_particle *gbest_pso_particle, int num_test_cores) {
     int i = 0;
