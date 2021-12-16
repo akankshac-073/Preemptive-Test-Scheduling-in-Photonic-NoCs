@@ -45,25 +45,6 @@
 #define INPUT 0
 #define OUTPUT 1
 
-// Active MR counts for different routing paths MR_<input port>_<output port>
-
-// #define MR_NORTH_INJECTION 1
-// #define MR_SOUTH_INJECTION 1
-// #define MR_EAST_INJECTION 1
-// #define MR_WEST_INJECTION 1
-// #define MR_INJECTION_NORTH 1 
-// #define MR_SOUTH_NORTH 0
-// #define MR_EAST_NORTH 1
-// #define MR_WEST_NORTH 1
-// #define MR_INJECTION_SOUTH 1
-// #define MR_NORTH_SOUTH 0
-// #define MR_EAST_SOUTH 1
-// #define MR_WEST_SOUTH 1
-// #define MR_INJECTION_EAST 1
-// #define MR_WEST_EAST 0
-// #define MR_INJECTION_WEST 1
-// #define MR_EAST_WEST 0
-
 // To indicate test completion (completion of all preemption instances)
 
 #define LAST_TEST_ADMINISTERED -73
@@ -95,6 +76,8 @@ struct _io_node {
 
 typedef struct _io_node IO_node;
 
+// IO schedule list head
+
 typedef struct {
     int size;                                      // Total number of nodes in IO schedule list
     IO_node *head_node;                            // Pointer to head node of IO schedule list
@@ -106,7 +89,7 @@ typedef struct {
     int io_pair_no;                                // IO pair index
     int input_core_no;                             // Input core index
     int output_core_no;                            // Output core index
-    IO_head io_head;                               // IO schedule list head
+    IO_head *io_head;                              // IO schedule list head
 } IO_pairs;
 
 // PSO particle
@@ -165,9 +148,11 @@ typedef struct _all_times All_times;
 typedef struct {
     int source_x;
     int source_y;
-    int destination_x
+    int destination_x;
     int destination_y;
-} Test_signals
+} Test_signals;
+
+// CLAP input list
 
 struct _clap_inputs {
     Test_signals test_signals[2 * MAX_IO_PAIRS];
@@ -194,16 +179,17 @@ double find_individual_testtime (NoC_node *noc_nodes, int input_core, int output
 // Finds the communication cost for a given PSO particle mapping --> consider hops (circuit switching scenario) --> use testtime (non-preemptive, single frequency)
 void find_communication_cost (PSO_particle *pso_particle, NoC_node *noc_nodes, int num_cores, IO_pairs *io_pairs, int num_io_pairs);
 
-// Creates an EMPTY Schedule list
-// Schedule_head *create_schedule_list ();
-
-// Update Schedule linked lists
-// void update_schedule_list (Schedule_head *head, double starttime, double endtime);
-
+// Maintains an ordered list of all starttimes and endtimes (used to generate CLAP input) 
 void update_times_list (All_times **head, double time);
+
+// Creates IO schedule lists
 IO_head *create_IO_list_head ();
+
+// Updates IO schedule lists
 void update_IO_list (IO_head *head, double starttime, double endtime, int testcore);
-void create_clap_input_list (Clap_inputs_head *head, IO_pairs *io_pairs, int num_io_pairs);
+
+// Creates an input list for the CLAP tool 
+void create_clap_input_list (Clap_inputs *head, IO_pairs *io_pairs, int num_io_pairs);
 
 // Populates the resource matrix with busytimes for all resources [links and router ports] in accordance with the XY-routing algorithm
 void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, int N_columns, int num_cores, IO_pairs *io_pairs, int num_io_pairs);
@@ -240,4 +226,7 @@ void print_pso_particle_info (PSO_particle *pso_particle, int num_test_cores);
 
 // Prints the mapping and test schedule information for the global best PSO particle
 void print_global_best_info (Gbest_PSO_particle *gbest_pso_particle, int num_test_cores);
+
+// Prints IO schedule lists
+void print_IO_schedule_lists (IO_head* head);
 
