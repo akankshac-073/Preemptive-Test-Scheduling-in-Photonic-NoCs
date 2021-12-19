@@ -80,6 +80,7 @@ typedef struct _io_node IO_node;
 
 typedef struct {
     int size;                                      // Total number of nodes in IO schedule list
+    double max_busytime;                           // Maximum busytime of IO pair
     IO_node *head_node;                            // Pointer to head node of IO schedule list
 } IO_head;
 

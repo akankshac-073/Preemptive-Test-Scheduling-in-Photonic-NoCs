@@ -154,6 +154,7 @@ IO_head *create_IO_list_head () {
     // Initialize queue parameters
     head->head_node = NULL;                       // Initialize head node pointer as NULL
     head->size = 0;                               // Initialize list size to 0
+    head->max_busytime = 0.0;                     // Initialize max busytime as 0.0
     
     // Return pointer to run queue head
     return head;
@@ -170,6 +171,8 @@ void update_IO_list (IO_head *head, double starttime, double endtime, int test_c
     new_node->starttime = starttime;
     new_node->endtime = endtime;
     new_node->test_core = test_core;
+    head->size++;
+    head->max_busytime = new_node->endtime;
 
     // If the queue is empty, new node becomes the head node
     if (head->head_node == NULL) {
@@ -208,6 +211,7 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
     int io_pair = 0;
     double starttime = 0.0;
     double endtime = 0.0;
+    double io_busytime = 0.0;
 
     // Initializing the resource matrix
     for (int i = 0; i < num_cores; i++) {
@@ -227,6 +231,7 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
     // Populating resource matrix with busytime (latest time till which the resource is busy) for all test cores
     for (int i = 0; i < num_test_cores; i++) {
 
+        // Use temporary variables to store core numbers and parameters -- just for convenience
         test_core = (int)pso_particle->mapping[i];
         io_pair = (int)(pso_particle->mapping[i + num_test_cores]);
         input_core = io_pairs[io_pair - 1].input_core_no;
@@ -234,7 +239,12 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
         frequency = pso_particle->mapping[i + (2 * num_test_cores)];
         preemption = pso_particle->mapping[i + (3 * num_test_cores)];
 
+        // Get max busytime corresponding to the IO pair used to test the given core
+        io_busytime = io_pairs[io_pair - 1].io_head->max_busytime;
+
+        // Find core individual testtime (assuming no resource conflicts)
         individual_testtime = find_individual_testtime (noc_nodes, input_core, output_core, test_core, frequency, preemption);
+        printf(" %lf\n\n", individual_testtime);
 
         // ------------------------------------------------------------------- ROUTING LOGIC -------------------------------------------------------------------
 
@@ -246,13 +256,16 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             xrouting_port_ic = EAST;
 
             // Update LINK busytimes between the input core and its adjacent core (link direction +x)
-            resource_matrix[input_core - 1][input_core].busytime += individual_testtime;
+            // resource_matrix[input_core - 1][input_core].busytime += individual_testtime;
+            resource_matrix[input_core - 1][input_core].busytime += max(resource_matrix[input_core - 1][input_core].busytime, io_busytime) + individual_testtime;
 
             // Update test endtime
             endtime = max(endtime, resource_matrix[input_core - 1][input_core].busytime);
 
             // Update ROUTER busytimes and statuses (routing direction +x i.e. input port INJECTION to output port EAST)
-            max_busytime = max (resource_matrix[input_core - 1][input_core - 1].busyports[EAST][INPUT].busytime, resource_matrix[input_core - 1][input_core - 1].busyports[INJECTION][OUTPUT].busytime);
+            resource_matrix[input_core - 1][input_core - 1].busyports[EAST][INPUT].busytime = max(resource_matrix[input_core - 1][input_core - 1].busyports[EAST][INPUT].busytime, io_busytime);
+            resource_matrix[input_core - 1][input_core - 1].busyports[INJECTION][OUTPUT].busytime = max(resource_matrix[input_core - 1][input_core - 1].busyports[INJECTION][OUTPUT].busytime, io_busytime);
+            max_busytime = max(resource_matrix[input_core - 1][input_core - 1].busyports[EAST][INPUT].busytime, resource_matrix[input_core - 1][input_core - 1].busyports[INJECTION][OUTPUT].busytime);
             resource_matrix[input_core - 1][input_core - 1].busyports[EAST][INPUT].busytime = max_busytime + individual_testtime;
             resource_matrix[input_core - 1][input_core - 1].busyports[INJECTION][OUTPUT].busytime = max_busytime + individual_testtime;
             resource_matrix[input_core - 1][input_core - 1].busyports[EAST][INPUT].port = INJECTION;
@@ -268,12 +281,15 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             for (int j = 0; j < (noc_nodes[test_core - 1].x_cord - noc_nodes[input_core - 1].x_cord - 1); j++) {
                 
                 // Update LINK busytimes between adjacent cores (link direction +x)
-                resource_matrix[input_core + j][input_core + j + 1].busytime += individual_testtime;
+                // resource_matrix[input_core + j][input_core + j + 1].busytime += individual_testtime;
+                resource_matrix[input_core + j][input_core + j + 1].busytime += max(resource_matrix[input_core + j][input_core + j + 1].busytime, io_busytime) + individual_testtime;
 
                 // Update test endtime
                 endtime = max(endtime, resource_matrix[input_core + j][input_core + j + 1].busytime);
 
                 // Update ROUTER busytimes and statuses (routing direction +x i.e. input port WEST to output port EAST)
+                resource_matrix[input_core + j][input_core + j].busyports[EAST][INPUT].busytime = max(resource_matrix[input_core + j][input_core + j].busyports[EAST][INPUT].busytime, io_busytime);
+                resource_matrix[input_core + j][input_core + j].busyports[WEST][OUTPUT].busytime = max(resource_matrix[input_core + j][input_core + j].busyports[WEST][OUTPUT].busytime, io_busytime);
                 max_busytime = max (resource_matrix[input_core + j][input_core + j].busyports[EAST][INPUT].busytime, resource_matrix[input_core + j][input_core + j].busyports[WEST][OUTPUT].busytime);
                 resource_matrix[input_core + j][input_core + j].busyports[EAST][INPUT].busytime = max_busytime + individual_testtime;
                 resource_matrix[input_core + j][input_core + j].busyports[WEST][OUTPUT].busytime = max_busytime + individual_testtime;
@@ -293,12 +309,15 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             xrouting_port_ic = WEST;
 
             // Update LINK busytimes between the test core and its adjacent core (link direction -x)
-            resource_matrix[input_core - 1][input_core - 2].busytime += individual_testtime;
+            // resource_matrix[input_core - 1][input_core - 2].busytime += individual_testtime;
+            resource_matrix[input_core - 1][input_core - 2].busytime += max(resource_matrix[input_core - 1][input_core - 2].busytime, io_busytime) + individual_testtime;
 
             // Update test endtime
             endtime = max(endtime, resource_matrix[input_core - 1][input_core - 2].busytime);
 
             // Update ROUTER busytimes and statuses (routing direction -x i.e. input port INJECTION to output port WEST)
+            resource_matrix[input_core - 1][input_core - 1].busyports[WEST][INPUT].busytime = max(resource_matrix[input_core - 1][input_core - 1].busyports[WEST][INPUT].busytime, io_busytime);
+            resource_matrix[input_core - 1][input_core - 1].busyports[INJECTION][OUTPUT].busytime = max(resource_matrix[input_core - 1][input_core - 1].busyports[INJECTION][OUTPUT].busytime, io_busytime);
             max_busytime = max (resource_matrix[input_core - 1][input_core - 1].busyports[WEST][INPUT].busytime, resource_matrix[input_core - 1][input_core - 1].busyports[INJECTION][OUTPUT].busytime);
             resource_matrix[input_core - 1][input_core - 1].busyports[WEST][INPUT].busytime = max_busytime + individual_testtime;
             resource_matrix[input_core - 1][input_core - 1].busyports[INJECTION][OUTPUT].busytime = max_busytime + individual_testtime;
@@ -314,20 +333,23 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             // * Index of input core - 1 is input_core - 2
             for (int j = 0; j < (noc_nodes[input_core - 1].x_cord - noc_nodes[test_core - 1].x_cord - 1); j++) {
 
-               // Update link busytimes between adjacent cores (link direction -x)
-               resource_matrix[input_core - j - 2][input_core - j - 3].busytime += individual_testtime;
+                // Update link busytimes between adjacent cores (link direction -x)
+                // resource_matrix[input_core - j - 2][input_core - j - 3].busytime += individual_testtime;
+                resource_matrix[input_core - j - 2][input_core - j - 3].busytime += max(resource_matrix[input_core - j - 2][input_core - j - 3].busytime, io_busytime) + individual_testtime;
 
-               // Update test endtime
-               endtime = max(endtime, resource_matrix[input_core - j - 2][input_core - j - 3].busytime);
+                // Update test endtime
+                endtime = max(endtime, resource_matrix[input_core - j - 2][input_core - j - 3].busytime);
 
-               // Update ROUTER busytimes and statuses (routing direction -x i.e. input port EAST to output port WEST)
-               max_busytime = max (resource_matrix[input_core - j - 2][input_core - j - 2].busyports[WEST][INPUT].busytime, resource_matrix[input_core - j - 2][input_core - j - 2].busyports[EAST][OUTPUT].busytime);
-               resource_matrix[input_core - j - 2][input_core - j - 2].busyports[WEST][INPUT].busytime = max_busytime + individual_testtime;
-               resource_matrix[input_core - j - 2][input_core - j - 2].busyports[EAST][OUTPUT].busytime = max_busytime + individual_testtime;
-               resource_matrix[input_core - j - 2][input_core - j - 2].busyports[WEST][INPUT].port = EAST;
-               resource_matrix[input_core - j - 2][input_core - j - 2].busyports[EAST][OUTPUT].port = WEST;
-               if (resource_matrix[input_core - j - 2][input_core - j - 2].busytime < max_busytime + individual_testtime)
-                   resource_matrix[input_core - j - 2][input_core - j - 2].busytime = max_busytime + individual_testtime;
+                // Update ROUTER busytimes and statuses (routing direction -x i.e. input port EAST to output port WEST)
+                resource_matrix[input_core - j - 2][input_core - j - 2].busyports[WEST][INPUT].busytime = max(resource_matrix[input_core - j - 2][input_core - j - 2].busyports[WEST][INPUT].busytime, io_busytime);
+                resource_matrix[input_core - j - 2][input_core - j - 2].busyports[EAST][OUTPUT].busytime = max(resource_matrix[input_core - j - 2][input_core - j - 2].busyports[EAST][OUTPUT].busytime, io_busytime);
+                max_busytime = max (resource_matrix[input_core - j - 2][input_core - j - 2].busyports[WEST][INPUT].busytime, resource_matrix[input_core - j - 2][input_core - j - 2].busyports[EAST][OUTPUT].busytime);
+                resource_matrix[input_core - j - 2][input_core - j - 2].busyports[WEST][INPUT].busytime = max_busytime + individual_testtime;
+                resource_matrix[input_core - j - 2][input_core - j - 2].busyports[EAST][OUTPUT].busytime = max_busytime + individual_testtime;
+                resource_matrix[input_core - j - 2][input_core - j - 2].busyports[WEST][INPUT].port = EAST;
+                resource_matrix[input_core - j - 2][input_core - j - 2].busyports[EAST][OUTPUT].port = WEST;
+                if (resource_matrix[input_core - j - 2][input_core - j - 2].busytime < max_busytime + individual_testtime)
+                    resource_matrix[input_core - j - 2][input_core - j - 2].busytime = max_busytime + individual_testtime;
 
                // Update test endtime
                endtime = max(endtime, resource_matrix[input_core - j - 2][input_core - j - 2].busytime);
@@ -343,12 +365,15 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             xrouting_port_co = EAST;
 
             // Update LINK busytimes between the test core and its adjacent core (link direction +x)
-            resource_matrix[test_core - 1][test_core].busytime += individual_testtime;
+            // resource_matrix[test_core - 1][test_core].busytime += individual_testtime;
+            resource_matrix[test_core - 1][test_core].busytime += max(resource_matrix[test_core - 1][test_core].busytime, io_busytime) + individual_testtime;
 
             // Update test endtime
             endtime = max(endtime, resource_matrix[test_core - 1][test_core].busytime);
 
             // Update ROUTER busytimes and statuses (routing direction +x i.e. input port INJECTION to output port EAST)
+            resource_matrix[test_core - 1][test_core - 1].busyports[EAST][INPUT].busytime = max(resource_matrix[test_core - 1][test_core - 1].busyports[EAST][INPUT].busytime, io_busytime);
+            resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].busytime = max(resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].busytime, io_busytime);
             max_busytime = max (resource_matrix[test_core - 1][test_core - 1].busyports[EAST][INPUT].busytime, resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].busytime);
             resource_matrix[test_core - 1][test_core - 1].busyports[EAST][INPUT].busytime = max_busytime + individual_testtime;
             resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].busytime = max_busytime + individual_testtime;
@@ -365,12 +390,15 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             for (int j = 0; j < (noc_nodes[output_core - 1].x_cord - noc_nodes[test_core - 1].x_cord - 1); j++) {
 
                 // Update LINK busytimes between adjacent cores (link direction +x)
-                resource_matrix[test_core + j][test_core + j + 1].busytime += individual_testtime;
+                // resource_matrix[test_core + j][test_core + j + 1].busytime += individual_testtime;
+                resource_matrix[test_core + j][test_core + j + 1].busytime += max(resource_matrix[test_core + j][test_core + j + 1].busytime, io_busytime) + individual_testtime;
 
                 // Update test endtime
                 endtime = max(endtime, resource_matrix[test_core + j][test_core + j + 1].busytime);
 
                 // Update ROUTER busytimes and statuses (routing direction +x i.e. input port WEST to output port EAST)
+                resource_matrix[test_core + j][test_core + j].busyports[EAST][INPUT].busytime = max(resource_matrix[test_core + j][test_core + j].busyports[EAST][INPUT].busytime, io_busytime);
+                resource_matrix[test_core + j][test_core + j].busyports[WEST][OUTPUT].busytime = max(resource_matrix[test_core + j][test_core + j].busyports[WEST][OUTPUT].busytime, io_busytime);
                 max_busytime = max (resource_matrix[test_core + j][test_core + j].busyports[EAST][INPUT].busytime, resource_matrix[test_core + j][test_core + j].busyports[WEST][OUTPUT].busytime);
                 resource_matrix[test_core + j][test_core + j].busyports[EAST][INPUT].busytime = max_busytime + individual_testtime;
                 resource_matrix[test_core + j][test_core + j].busyports[WEST][OUTPUT].busytime = max_busytime + individual_testtime;
@@ -387,47 +415,53 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
         // If test core x coordinate > output core x coordinate, update busytime for links b/w cores
         else if (noc_nodes[test_core - 1].x_cord > noc_nodes[output_core - 1].x_cord) {
                 
-           xrouting_port_co = WEST;
+            xrouting_port_co = WEST;
 
-           // Update LINK busytimes between the test core and its adjacent core (link direction -x)
-           resource_matrix[test_core - 1][test_core - 2].busytime += individual_testtime;
+            // Update LINK busytimes between the test core and its adjacent core (link direction -x)
+            // resource_matrix[test_core - 1][test_core - 2].busytime += individual_testtime;
+            resource_matrix[test_core - 1][test_core - 2].busytime += max(resource_matrix[test_core - 1][test_core - 2].busytime, io_busytime) + individual_testtime;
 
-           // Update test endtime
-           endtime = max(endtime, resource_matrix[test_core - 1][test_core - 2].busytime);
+            // Update test endtime
+            endtime = max(endtime, resource_matrix[test_core - 1][test_core - 2].busytime);
 
-           // Update ROUTER busytimes and statuses (routing direction -x i.e. input port INJECTION to output port WEST)
-           max_busytime = max (resource_matrix[test_core - 1][test_core - 1].busyports[WEST][INPUT].busytime, resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].busytime);
-           resource_matrix[test_core - 1][test_core - 1].busyports[WEST][INPUT].busytime = max_busytime + individual_testtime;
-           resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].busytime = max_busytime + individual_testtime;
-           resource_matrix[test_core - 1][test_core - 1].busyports[WEST][INPUT].port = INJECTION;
-           resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].port = WEST;
-           if (resource_matrix[test_core - 1][test_core - 1].busytime < max_busytime + individual_testtime)
-               resource_matrix[test_core - 1][test_core - 1].busytime = max_busytime + individual_testtime;
+            // Update ROUTER busytimes and statuses (routing direction -x i.e. input port INJECTION to output port WEST)
+            resource_matrix[test_core - 1][test_core - 1].busyports[WEST][INPUT].busytime = max(resource_matrix[test_core - 1][test_core - 1].busyports[WEST][INPUT].busytime, io_busytime);
+            resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].busytime = max(resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].busytime, io_busytime);
+            max_busytime = max (resource_matrix[test_core - 1][test_core - 1].busyports[WEST][INPUT].busytime, resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].busytime);
+            resource_matrix[test_core - 1][test_core - 1].busyports[WEST][INPUT].busytime = max_busytime + individual_testtime;
+            resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].busytime = max_busytime + individual_testtime;
+            resource_matrix[test_core - 1][test_core - 1].busyports[WEST][INPUT].port = INJECTION;
+            resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].port = WEST;
+            if (resource_matrix[test_core - 1][test_core - 1].busytime < max_busytime + individual_testtime)
+                resource_matrix[test_core - 1][test_core - 1].busytime = max_busytime + individual_testtime;
 
-           // Update test endtime
-           endtime = max(endtime, resource_matrix[test_core - 1][test_core - 1].busytime);
+            // Update test endtime
+            endtime = max(endtime, resource_matrix[test_core - 1][test_core - 1].busytime);
 
-           // From (test core - 1) to (test core - (difference in x-coordinates - 1))
-           // * Index of test core - 1 is input_core - 2
-           for (int j = 2; j < (noc_nodes[test_core - 1].x_cord - noc_nodes[output_core - 1].x_cord - 1); j++) {
+            // From (test core - 1) to (test core - (difference in x-coordinates - 1))
+            // * Index of test core - 1 is input_core - 2
+            for (int j = 2; j < (noc_nodes[test_core - 1].x_cord - noc_nodes[output_core - 1].x_cord - 1); j++) {
 
-               // Update link busytimes between adjacent cores (link direction -x)
-               resource_matrix[test_core - j - 2][test_core - j - 3].busytime += individual_testtime;
+                // Update link busytimes between adjacent cores (link direction -x)
+                // resource_matrix[test_core - j - 2][test_core - j - 3].busytime += individual_testtime;
+                resource_matrix[test_core - j - 2][test_core - j - 3].busytime += max(resource_matrix[test_core - j - 2][test_core - j - 3].busytime, io_busytime) + individual_testtime;
 
-               // Update test endtime
-               endtime = max(endtime, resource_matrix[test_core - j - 2][test_core - j - 3].busytime);
+                // Update test endtime
+                endtime = max(endtime, resource_matrix[test_core - j - 2][test_core - j - 3].busytime);
 
-               // Update ROUTER busytimes and statuses (routing direction -x i.e. input port EAST to output port WEST)
-               max_busytime = max (resource_matrix[test_core - j - 2][test_core - j - 2].busyports[WEST][INPUT].busytime, resource_matrix[test_core - j - 2][test_core - j - 2].busyports[EAST][OUTPUT].busytime);
-               resource_matrix[test_core - j - 2][test_core - j - 2].busyports[WEST][INPUT].busytime = max_busytime + individual_testtime;
-               resource_matrix[test_core - j - 2][test_core - j - 2].busyports[EAST][OUTPUT].busytime = max_busytime + individual_testtime;
-               resource_matrix[test_core - j - 2][test_core - j - 2].busyports[WEST][INPUT].port = EAST;
-               resource_matrix[test_core - j - 2][test_core - j - 2].busyports[EAST][OUTPUT].port = WEST;
-               if (resource_matrix[test_core - j - 2][test_core - j - 2].busytime < max_busytime + individual_testtime)
-                   resource_matrix[test_core - j - 2][test_core - j - 2].busytime = max_busytime + individual_testtime;
+                // Update ROUTER busytimes and statuses (routing direction -x i.e. input port EAST to output port WEST)
+                resource_matrix[test_core - j - 2][test_core - j - 2].busyports[WEST][INPUT].busytime = max(resource_matrix[test_core - j - 2][test_core - j - 2].busyports[WEST][INPUT].busytime, io_busytime);
+                resource_matrix[test_core - j - 2][test_core - j - 2].busyports[EAST][OUTPUT].busytime = max(resource_matrix[test_core - j - 2][test_core - j - 2].busyports[EAST][OUTPUT].busytime, io_busytime);
+                max_busytime = max (resource_matrix[test_core - j - 2][test_core - j - 2].busyports[WEST][INPUT].busytime, resource_matrix[test_core - j - 2][test_core - j - 2].busyports[EAST][OUTPUT].busytime);
+                resource_matrix[test_core - j - 2][test_core - j - 2].busyports[WEST][INPUT].busytime = max_busytime + individual_testtime;
+                resource_matrix[test_core - j - 2][test_core - j - 2].busyports[EAST][OUTPUT].busytime = max_busytime + individual_testtime;
+                resource_matrix[test_core - j - 2][test_core - j - 2].busyports[WEST][INPUT].port = EAST;
+                resource_matrix[test_core - j - 2][test_core - j - 2].busyports[EAST][OUTPUT].port = WEST;
+                if (resource_matrix[test_core - j - 2][test_core - j - 2].busytime < max_busytime + individual_testtime)
+                    resource_matrix[test_core - j - 2][test_core - j - 2].busytime = max_busytime + individual_testtime;
 
-               // Update test endtime
-               endtime = max(endtime, resource_matrix[test_core - j - 2][test_core - j - 2].busytime);
+                // Update test endtime
+                endtime = max(endtime, resource_matrix[test_core - j - 2][test_core - j - 2].busytime);
             }
         }
                 
@@ -444,12 +478,15 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
         if (noc_nodes[input_core - 1].y_cord < noc_nodes[test_core - 1].y_cord) {
 
             // Update LINK busytimes between the input core and its adjacent core (link direction +y)
-            resource_matrix[ic_core - 1][ic_core - 1 + N_columns].busytime += individual_testtime;
+            // resource_matrix[ic_core - 1][ic_core - 1 + N_columns].busytime += individual_testtime;
+            resource_matrix[ic_core - 1][ic_core - 1 + N_columns].busytime += max(resource_matrix[ic_core - 1][ic_core - 1 + N_columns].busytime, io_busytime) + individual_testtime;
 
             // Update test endtime
             endtime = max(endtime, resource_matrix[ic_core - 1][ic_core - 1 + N_columns].busytime);
 
             // Update ROUTER busytimes and statuses (routing direction +y i.e. input port EAST/WEST (xrouting_port_ic) to output port NORTH)
+            resource_matrix[ic_core - 1][ic_core - 1].busyports[NORTH][INPUT].busytime = max(resource_matrix[ic_core - 1][ic_core - 1].busyports[NORTH][INPUT].busytime, io_busytime);
+            resource_matrix[ic_core - 1][ic_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime = max(resource_matrix[ic_core - 1][ic_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime, io_busytime);
             max_busytime = max (resource_matrix[ic_core - 1][ic_core - 1].busyports[NORTH][INPUT].busytime, resource_matrix[ic_core - 1][ic_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime);
             resource_matrix[ic_core - 1][ic_core - 1].busyports[NORTH][INPUT].busytime = max_busytime + individual_testtime;
             resource_matrix[ic_core - 1][ic_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime = max_busytime + individual_testtime;
@@ -466,17 +503,20 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             for (int j = 0; j < (noc_nodes[test_core - 1].y_cord - noc_nodes[input_core - 1].y_cord - 1); j++) {
 
                 // Update LINK busytimes between adjacent cores (link direction +y)
-                resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 2) * N_columns].busytime += individual_testtime;
+                // resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 2) * N_columns].busytime += individual_testtime;
+                resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 2) * N_columns].busytime += max(resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 2) * N_columns].busytime, io_busytime) + individual_testtime;
 
                 // Update test endtime
                 endtime = max(endtime, resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 2) * N_columns].busytime);
 
-                // Update ROUTER busytimes and statuses (routing direction +y i.e. input port EAST/WEST (xrouting_port_ic) to output port NORTH))
-                max_busytime = max (resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[NORTH][INPUT].busytime, resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].busytime);
+                // Update ROUTER busytimes and statuses (routing direction +y i.e. input port SOUTH to output port NORTH))
+                resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[NORTH][INPUT].busytime = max(resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[NORTH][INPUT].busytime, io_busytime);
+                resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[SOUTH][OUTPUT].busytime = max(resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[SOUTH][OUTPUT].busytime, io_busytime);
+                max_busytime = max (resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[NORTH][INPUT].busytime, resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[SOUTH][OUTPUT].busytime);
                 resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[NORTH][INPUT].busytime = max_busytime + individual_testtime;
-                resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].busytime = max_busytime + individual_testtime;
-                resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[NORTH][INPUT].port = xrouting_port_ic;
-                resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].port = NORTH;
+                resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[SOUTH][OUTPUT].busytime = max_busytime + individual_testtime;
+                resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[NORTH][INPUT].port = SOUTH;
+                resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[SOUTH][OUTPUT].port = NORTH;
                 if (resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busytime < max_busytime + individual_testtime)
                     resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busytime = max_busytime + individual_testtime;
 
@@ -489,12 +529,15 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
         else if (noc_nodes[input_core - 1].y_cord > noc_nodes[test_core - 1].y_cord) {
                 
             // Update LINK busytimes between the input core and its adjacent core (link direction -y)
-            resource_matrix[ic_core - 1][ic_core - 1 - N_columns].busytime += individual_testtime;
+            // resource_matrix[ic_core - 1][ic_core - 1 - N_columns].busytime += individual_testtime;
+            resource_matrix[ic_core - 1][ic_core - 1 - N_columns].busytime += max(resource_matrix[ic_core - 1][ic_core - 1 - N_columns].busytime, io_busytime) + individual_testtime;
 
             // Update test endtime
             endtime = max(endtime, resource_matrix[ic_core - 1][ic_core - 1 - N_columns].busytime);
 
             // Update ROUTER busytimes and statuses (routing direction -y i.e. input port EAST/WEST (xrouting_port_ic) to output port SOUTH)
+            resource_matrix[ic_core - 1][ic_core - 1].busyports[SOUTH][INPUT].busytime = max(resource_matrix[ic_core - 1][ic_core - 1].busyports[SOUTH][INPUT].busytime, io_busytime);
+            resource_matrix[ic_core - 1][ic_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime = max(resource_matrix[ic_core - 1][ic_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime, io_busytime);
             max_busytime = max (resource_matrix[ic_core - 1][ic_core - 1].busyports[SOUTH][INPUT].busytime, resource_matrix[ic_core - 1][ic_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime);
             resource_matrix[ic_core - 1][ic_core - 1].busyports[SOUTH][INPUT].busytime = max_busytime + individual_testtime;
             resource_matrix[ic_core - 1][ic_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime = max_busytime + individual_testtime;
@@ -511,17 +554,20 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             for (int j = 0; j < (noc_nodes[input_core - 1].y_cord - noc_nodes[test_core - 1].y_cord - 1); j++) {
 
                 // Update LINK busytimes between adjacent cores (link direction -y)
-                resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 2) * N_columns].busytime += individual_testtime;
+                // resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 2) * N_columns].busytime += individual_testtime;
+                resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 2) * N_columns].busytime += max(resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 2) * N_columns].busytime, io_busytime) + individual_testtime;
 
                 // Update test endtime
                 endtime = max(endtime, resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 2) * N_columns].busytime);
 
-                // Update ROUTER busytimes and statuses (routing direction +y i.e. input port EAST/WEST (xrouting_port_ic) to output port SOUTH))
-                max_busytime = max (resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[SOUTH][INPUT].busytime, resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].busytime);
+                // Update ROUTER busytimes and statuses (routing direction -y i.e. input port NORTH to output port SOUTH))
+                resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[SOUTH][INPUT].busytime = max(resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[SOUTH][INPUT].busytime, io_busytime);
+                resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[NORTH][OUTPUT].busytime = max(resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[NORTH][OUTPUT].busytime, io_busytime);
+                max_busytime = max (resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[SOUTH][INPUT].busytime, resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[NORTH][OUTPUT].busytime);
                 resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[SOUTH][INPUT].busytime = max_busytime + individual_testtime;
-                resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].busytime = max_busytime + individual_testtime;
-                resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[SOUTH][INPUT].port = xrouting_port_ic;
-                resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].port = SOUTH;
+                resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[NORTH][OUTPUT].busytime = max_busytime + individual_testtime;
+                resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[SOUTH][INPUT].port = NORTH;
+                resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[NORTH][OUTPUT].port = SOUTH;
                 if (resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busytime < max_busytime + individual_testtime)
                     resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busytime = max_busytime + individual_testtime;
 
@@ -534,17 +580,20 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
         if (noc_nodes[test_core - 1].y_cord < noc_nodes[output_core - 1].y_cord) {
 
             // Update LINK busytimes between the input core and its adjacent core (link direction +y)
-            resource_matrix[co_core - 1][co_core - 1 + N_columns].busytime += individual_testtime;
+            // resource_matrix[co_core - 1][co_core - 1 + N_columns].busytime += individual_testtime;
+            resource_matrix[co_core - 1][co_core - 1 + N_columns].busytime += max(resource_matrix[co_core - 1][co_core - 1 + N_columns].busytime, io_busytime) + individual_testtime;
 
             // Update test endtime
             endtime = max(endtime, resource_matrix[co_core - 1][co_core - 1 + N_columns].busytime);
 
-            // Update ROUTER busytimes and statuses (routing direction +y i.e. input port EAST/WEST (xrouting_port_ic) to output port NORTH)
-            max_busytime = max (resource_matrix[co_core - 1][co_core - 1].busyports[NORTH][INPUT].busytime, resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime);
+            // Update ROUTER busytimes and statuses (routing direction +y i.e. input port EAST/WEST (xrouting_port_co) to output port NORTH)
+            resource_matrix[co_core - 1][co_core - 1].busyports[NORTH][INPUT].busytime = max(resource_matrix[co_core - 1][co_core - 1].busyports[NORTH][INPUT].busytime, io_busytime);
+            resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_co][OUTPUT].busytime = max(resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_co][OUTPUT].busytime, io_busytime);
+            max_busytime = max (resource_matrix[co_core - 1][co_core - 1].busyports[NORTH][INPUT].busytime, resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_co][OUTPUT].busytime);
             resource_matrix[co_core - 1][co_core - 1].busyports[NORTH][INPUT].busytime = max_busytime + individual_testtime;
-            resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime = max_busytime + individual_testtime;
-            resource_matrix[co_core - 1][co_core - 1].busyports[NORTH][INPUT].port = xrouting_port_ic;
-            resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_ic][OUTPUT].port = NORTH;
+            resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_co][OUTPUT].busytime = max_busytime + individual_testtime;
+            resource_matrix[co_core - 1][co_core - 1].busyports[NORTH][INPUT].port = xrouting_port_co;
+            resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_co][OUTPUT].port = NORTH;
             if (resource_matrix[co_core - 1][co_core - 1].busytime < max_busytime + individual_testtime)
                 resource_matrix[co_core - 1][co_core - 1].busytime = max_busytime + individual_testtime;
 
@@ -556,17 +605,20 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             for (int j = 0; j < (noc_nodes[output_core - 1].y_cord - noc_nodes[test_core - 1].y_cord - 1); j++) {
 
                 // Update LINK busytimes between adjacent cores (link direction +y)
-                resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 2) * N_columns].busytime += individual_testtime;
+                // resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 2) * N_columns].busytime += individual_testtime;
+                resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 2) * N_columns].busytime += max(resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 2) * N_columns].busytime, io_busytime) + individual_testtime;
 
                 // Update test endtime
                 endtime = max(endtime, resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 2) * N_columns].busytime);
 
-                // Update ROUTER busytimes and statuses (routing direction +y i.e. input port EAST/WEST (xrouting_port_ic) to output port NORTH))
-                max_busytime = max (resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[NORTH][INPUT].busytime, resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].busytime);
+                // Update ROUTER busytimes and statuses (routing direction +y i.e. input port SOUTH to output port NORTH))
+                resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[NORTH][INPUT].busytime = max(resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[NORTH][INPUT].busytime, io_busytime);
+                resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[SOUTH][OUTPUT].busytime = max(resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[SOUTH][OUTPUT].busytime, io_busytime);
+                max_busytime = max (resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[NORTH][INPUT].busytime, resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[SOUTH][OUTPUT].busytime);
                 resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[NORTH][INPUT].busytime = max_busytime + individual_testtime;
-                resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].busytime = max_busytime + individual_testtime;
-                resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[NORTH][INPUT].port = xrouting_port_ic;
-                resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].port = NORTH;
+                resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[SOUTH][OUTPUT].busytime = max_busytime + individual_testtime;
+                resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[NORTH][INPUT].port = SOUTH;
+                resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[SOUTH][OUTPUT].port = NORTH;
                 if (resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busytime < max_busytime + individual_testtime)
                     resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busytime = max_busytime + individual_testtime;
 
@@ -579,17 +631,20 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
         else if (noc_nodes[test_core - 1].y_cord > noc_nodes[output_core - 1].y_cord) {
             
             // Update LINK busytimes between the input core and its adjacent core (link direction -y)
-            resource_matrix[co_core - 1][co_core - 1 - N_columns].busytime += individual_testtime;
+            // resource_matrix[co_core - 1][co_core - 1 - N_columns].busytime += individual_testtime;
+            resource_matrix[co_core - 1][co_core - 1 - N_columns].busytime += max(resource_matrix[co_core - 1][co_core - 1 - N_columns].busytime, io_busytime) + individual_testtime;
 
             // Update test endtime
             endtime = max(endtime, resource_matrix[co_core - 1][co_core - 1 - N_columns].busytime);
 
-            // Update ROUTER busytimes and statuses (routing direction -y i.e. input port EAST/WEST (xrouting_port_ic) to output port SOUTH)
-            max_busytime = max (resource_matrix[co_core - 1][co_core - 1].busyports[SOUTH][INPUT].busytime, resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime);
+            // Update ROUTER busytimes and statuses (routing direction -y i.e. input port EAST/WEST (xrouting_port_co) to output port SOUTH)
+            resource_matrix[co_core - 1][co_core - 1].busyports[SOUTH][INPUT].busytime = max(resource_matrix[co_core - 1][co_core - 1].busyports[SOUTH][INPUT].busytime, io_busytime);
+            resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_co][OUTPUT].busytime = max(resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_co][OUTPUT].busytime, io_busytime);
+            max_busytime = max (resource_matrix[co_core - 1][co_core - 1].busyports[SOUTH][INPUT].busytime, resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_co][OUTPUT].busytime);
             resource_matrix[co_core - 1][co_core - 1].busyports[SOUTH][INPUT].busytime = max_busytime + individual_testtime;
-            resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime = max_busytime + individual_testtime;
-            resource_matrix[co_core - 1][co_core - 1].busyports[SOUTH][INPUT].port = xrouting_port_ic;
-            resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_ic][OUTPUT].port = SOUTH;
+            resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_co][OUTPUT].busytime = max_busytime + individual_testtime;
+            resource_matrix[co_core - 1][co_core - 1].busyports[SOUTH][INPUT].port = xrouting_port_co;
+            resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_co][OUTPUT].port = SOUTH;
             if (resource_matrix[co_core - 1][co_core - 1].busytime < max_busytime + individual_testtime)
                 resource_matrix[co_core - 1][co_core - 1].busytime = max_busytime + individual_testtime;
 
@@ -601,34 +656,26 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             for (int j = 0; j < (noc_nodes[test_core - 1].y_cord - noc_nodes[output_core - 1].y_cord - 1); j++) {
 
                 // Update LINK busytimes between adjacent cores (link direction -y)
-                resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 2) * N_columns].busytime += individual_testtime;
+                // resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 2) * N_columns].busytime += individual_testtime;
+                resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 2) * N_columns].busytime += max(resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 2) * N_columns].busytime, io_busytime) + individual_testtime;
 
                 // Update test endtime
                 endtime = max(endtime, resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 2) * N_columns].busytime);
 
-                // Update ROUTER busytimes and statuses (routing direction +y i.e. input port EAST/WEST (xrouting_port_ic) to output port SOUTH))
-                max_busytime = max (resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[SOUTH][INPUT].busytime, resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].busytime);
+                // Update ROUTER busytimes and statuses (routing direction +y i.e. input port NORTH to output port SOUTH))
+                resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[SOUTH][INPUT].busytime = max(resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[SOUTH][INPUT].busytime, io_busytime);
+                resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[NORTH][OUTPUT].busytime = max(resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[NORTH][OUTPUT].busytime, io_busytime);
+                max_busytime = max (resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[SOUTH][INPUT].busytime, resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[NORTH][OUTPUT].busytime);
                 resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[SOUTH][INPUT].busytime = max_busytime + individual_testtime;
-                resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].busytime = max_busytime + individual_testtime;
-                resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[SOUTH][INPUT].port = xrouting_port_ic;
-                resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[xrouting_port_ic][OUTPUT].port = SOUTH;
+                resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[NORTH][OUTPUT].busytime = max_busytime + individual_testtime;
+                resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[SOUTH][INPUT].port = NORTH;
+                resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[NORTH][OUTPUT].port = SOUTH;
                 if (resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busytime < max_busytime + individual_testtime)
                     resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busytime = max_busytime + individual_testtime;
 
                 // Update test endtime
                 endtime = max(endtime, resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busytime);
             }
-        }
-        
-        // Printing the resource matrix with calculated busytimes
-        printf("\n\n");
-        for (int i = 0; i < num_cores; i++) {
-            for (int j = 0; j < num_cores; j++) {
-                printf(" | %.2lf", resource_matrix[i][j].busytime);
-                if (pso_particle->testtime < resource_matrix[i][j].busytime)
-                    pso_particle->testtime = resource_matrix[i][j].busytime;
-            } 
-            printf(" |\n\n");
         }
 
         // Update test starttime
@@ -640,6 +687,17 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
 
         // Update IO list schedule
         update_IO_list(io_pairs[io_pair - 1].io_head, starttime, endtime, test_core);
+
+        // Printing the resource matrix with calculated busytimes
+        printf("\n\n");
+        for (int i = 0; i < num_cores; i++) {
+            for (int j = 0; j < num_cores; j++) {
+                printf(" | %.2lf", resource_matrix[i][j].busytime);
+                if (pso_particle->testtime < resource_matrix[i][j].busytime)
+                    pso_particle->testtime = resource_matrix[i][j].busytime;
+            } 
+            printf(" |\n\n");
+        }
     }
 
     // Printing the resource matrix with calculated busytimes
