@@ -172,7 +172,7 @@ void update_IO_list (IO_head *head, double starttime, double endtime, int test_c
     new_node->endtime = endtime;
     new_node->test_core = test_core;
     head->size++;
-    head->max_busytime = new_node->endtime;
+    head->max_busytime = endtime;
 
     // If the queue is empty, new node becomes the head node
     if (head->head_node == NULL) {
@@ -241,10 +241,11 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
 
         // Get max busytime corresponding to the IO pair used to test the given core
         io_busytime = io_pairs[io_pair - 1].io_head->max_busytime;
+        printf("\n IO (%d): %lf\n", io_pair - 1, io_busytime);
 
         // Find core individual testtime (assuming no resource conflicts)
         individual_testtime = find_individual_testtime (noc_nodes, input_core, output_core, test_core, frequency, preemption);
-        printf(" %lf\n\n", individual_testtime);
+        printf(" Test: %lf\n\n", individual_testtime);
 
         // ------------------------------------------------------------------- ROUTING LOGIC -------------------------------------------------------------------
 
@@ -257,7 +258,7 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
 
             // Update LINK busytimes between the input core and its adjacent core (link direction +x)
             // resource_matrix[input_core - 1][input_core].busytime += individual_testtime;
-            resource_matrix[input_core - 1][input_core].busytime += max(resource_matrix[input_core - 1][input_core].busytime, io_busytime) + individual_testtime;
+            resource_matrix[input_core - 1][input_core].busytime = max(resource_matrix[input_core - 1][input_core].busytime, io_busytime) + individual_testtime;
 
             // Update test endtime
             endtime = max(endtime, resource_matrix[input_core - 1][input_core].busytime);
@@ -282,7 +283,7 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 
                 // Update LINK busytimes between adjacent cores (link direction +x)
                 // resource_matrix[input_core + j][input_core + j + 1].busytime += individual_testtime;
-                resource_matrix[input_core + j][input_core + j + 1].busytime += max(resource_matrix[input_core + j][input_core + j + 1].busytime, io_busytime) + individual_testtime;
+                resource_matrix[input_core + j][input_core + j + 1].busytime = max(resource_matrix[input_core + j][input_core + j + 1].busytime, io_busytime) + individual_testtime;
 
                 // Update test endtime
                 endtime = max(endtime, resource_matrix[input_core + j][input_core + j + 1].busytime);
@@ -310,7 +311,7 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
 
             // Update LINK busytimes between the test core and its adjacent core (link direction -x)
             // resource_matrix[input_core - 1][input_core - 2].busytime += individual_testtime;
-            resource_matrix[input_core - 1][input_core - 2].busytime += max(resource_matrix[input_core - 1][input_core - 2].busytime, io_busytime) + individual_testtime;
+            resource_matrix[input_core - 1][input_core - 2].busytime = max(resource_matrix[input_core - 1][input_core - 2].busytime, io_busytime) + individual_testtime;
 
             // Update test endtime
             endtime = max(endtime, resource_matrix[input_core - 1][input_core - 2].busytime);
@@ -335,7 +336,7 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
 
                 // Update link busytimes between adjacent cores (link direction -x)
                 // resource_matrix[input_core - j - 2][input_core - j - 3].busytime += individual_testtime;
-                resource_matrix[input_core - j - 2][input_core - j - 3].busytime += max(resource_matrix[input_core - j - 2][input_core - j - 3].busytime, io_busytime) + individual_testtime;
+                resource_matrix[input_core - j - 2][input_core - j - 3].busytime = max(resource_matrix[input_core - j - 2][input_core - j - 3].busytime, io_busytime) + individual_testtime;
 
                 // Update test endtime
                 endtime = max(endtime, resource_matrix[input_core - j - 2][input_core - j - 3].busytime);
@@ -366,7 +367,7 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
 
             // Update LINK busytimes between the test core and its adjacent core (link direction +x)
             // resource_matrix[test_core - 1][test_core].busytime += individual_testtime;
-            resource_matrix[test_core - 1][test_core].busytime += max(resource_matrix[test_core - 1][test_core].busytime, io_busytime) + individual_testtime;
+            resource_matrix[test_core - 1][test_core].busytime = max(resource_matrix[test_core - 1][test_core].busytime, io_busytime) + individual_testtime;
 
             // Update test endtime
             endtime = max(endtime, resource_matrix[test_core - 1][test_core].busytime);
@@ -391,7 +392,7 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
 
                 // Update LINK busytimes between adjacent cores (link direction +x)
                 // resource_matrix[test_core + j][test_core + j + 1].busytime += individual_testtime;
-                resource_matrix[test_core + j][test_core + j + 1].busytime += max(resource_matrix[test_core + j][test_core + j + 1].busytime, io_busytime) + individual_testtime;
+                resource_matrix[test_core + j][test_core + j + 1].busytime = max(resource_matrix[test_core + j][test_core + j + 1].busytime, io_busytime) + individual_testtime;
 
                 // Update test endtime
                 endtime = max(endtime, resource_matrix[test_core + j][test_core + j + 1].busytime);
@@ -419,7 +420,7 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
 
             // Update LINK busytimes between the test core and its adjacent core (link direction -x)
             // resource_matrix[test_core - 1][test_core - 2].busytime += individual_testtime;
-            resource_matrix[test_core - 1][test_core - 2].busytime += max(resource_matrix[test_core - 1][test_core - 2].busytime, io_busytime) + individual_testtime;
+            resource_matrix[test_core - 1][test_core - 2].busytime = max(resource_matrix[test_core - 1][test_core - 2].busytime, io_busytime) + individual_testtime;
 
             // Update test endtime
             endtime = max(endtime, resource_matrix[test_core - 1][test_core - 2].busytime);
@@ -444,7 +445,7 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
 
                 // Update link busytimes between adjacent cores (link direction -x)
                 // resource_matrix[test_core - j - 2][test_core - j - 3].busytime += individual_testtime;
-                resource_matrix[test_core - j - 2][test_core - j - 3].busytime += max(resource_matrix[test_core - j - 2][test_core - j - 3].busytime, io_busytime) + individual_testtime;
+                resource_matrix[test_core - j - 2][test_core - j - 3].busytime = max(resource_matrix[test_core - j - 2][test_core - j - 3].busytime, io_busytime) + individual_testtime;
 
                 // Update test endtime
                 endtime = max(endtime, resource_matrix[test_core - j - 2][test_core - j - 3].busytime);
@@ -479,7 +480,7 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
 
             // Update LINK busytimes between the input core and its adjacent core (link direction +y)
             // resource_matrix[ic_core - 1][ic_core - 1 + N_columns].busytime += individual_testtime;
-            resource_matrix[ic_core - 1][ic_core - 1 + N_columns].busytime += max(resource_matrix[ic_core - 1][ic_core - 1 + N_columns].busytime, io_busytime) + individual_testtime;
+            resource_matrix[ic_core - 1][ic_core - 1 + N_columns].busytime = max(resource_matrix[ic_core - 1][ic_core - 1 + N_columns].busytime, io_busytime) + individual_testtime;
 
             // Update test endtime
             endtime = max(endtime, resource_matrix[ic_core - 1][ic_core - 1 + N_columns].busytime);
@@ -504,7 +505,7 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
 
                 // Update LINK busytimes between adjacent cores (link direction +y)
                 // resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 2) * N_columns].busytime += individual_testtime;
-                resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 2) * N_columns].busytime += max(resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 2) * N_columns].busytime, io_busytime) + individual_testtime;
+                resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 2) * N_columns].busytime = max(resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 2) * N_columns].busytime, io_busytime) + individual_testtime;
 
                 // Update test endtime
                 endtime = max(endtime, resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 2) * N_columns].busytime);
@@ -530,7 +531,7 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 
             // Update LINK busytimes between the input core and its adjacent core (link direction -y)
             // resource_matrix[ic_core - 1][ic_core - 1 - N_columns].busytime += individual_testtime;
-            resource_matrix[ic_core - 1][ic_core - 1 - N_columns].busytime += max(resource_matrix[ic_core - 1][ic_core - 1 - N_columns].busytime, io_busytime) + individual_testtime;
+            resource_matrix[ic_core - 1][ic_core - 1 - N_columns].busytime = max(resource_matrix[ic_core - 1][ic_core - 1 - N_columns].busytime, io_busytime) + individual_testtime;
 
             // Update test endtime
             endtime = max(endtime, resource_matrix[ic_core - 1][ic_core - 1 - N_columns].busytime);
@@ -555,7 +556,7 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
 
                 // Update LINK busytimes between adjacent cores (link direction -y)
                 // resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 2) * N_columns].busytime += individual_testtime;
-                resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 2) * N_columns].busytime += max(resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 2) * N_columns].busytime, io_busytime) + individual_testtime;
+                resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 2) * N_columns].busytime = max(resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 2) * N_columns].busytime, io_busytime) + individual_testtime;
 
                 // Update test endtime
                 endtime = max(endtime, resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 2) * N_columns].busytime);
@@ -581,7 +582,7 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
 
             // Update LINK busytimes between the input core and its adjacent core (link direction +y)
             // resource_matrix[co_core - 1][co_core - 1 + N_columns].busytime += individual_testtime;
-            resource_matrix[co_core - 1][co_core - 1 + N_columns].busytime += max(resource_matrix[co_core - 1][co_core - 1 + N_columns].busytime, io_busytime) + individual_testtime;
+            resource_matrix[co_core - 1][co_core - 1 + N_columns].busytime = max(resource_matrix[co_core - 1][co_core - 1 + N_columns].busytime, io_busytime) + individual_testtime;
 
             // Update test endtime
             endtime = max(endtime, resource_matrix[co_core - 1][co_core - 1 + N_columns].busytime);
@@ -606,7 +607,7 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
 
                 // Update LINK busytimes between adjacent cores (link direction +y)
                 // resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 2) * N_columns].busytime += individual_testtime;
-                resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 2) * N_columns].busytime += max(resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 2) * N_columns].busytime, io_busytime) + individual_testtime;
+                resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 2) * N_columns].busytime = max(resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 2) * N_columns].busytime, io_busytime) + individual_testtime;
 
                 // Update test endtime
                 endtime = max(endtime, resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 2) * N_columns].busytime);
@@ -632,7 +633,7 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             
             // Update LINK busytimes between the input core and its adjacent core (link direction -y)
             // resource_matrix[co_core - 1][co_core - 1 - N_columns].busytime += individual_testtime;
-            resource_matrix[co_core - 1][co_core - 1 - N_columns].busytime += max(resource_matrix[co_core - 1][co_core - 1 - N_columns].busytime, io_busytime) + individual_testtime;
+            resource_matrix[co_core - 1][co_core - 1 - N_columns].busytime = max(resource_matrix[co_core - 1][co_core - 1 - N_columns].busytime, io_busytime) + individual_testtime;
 
             // Update test endtime
             endtime = max(endtime, resource_matrix[co_core - 1][co_core - 1 - N_columns].busytime);
@@ -657,7 +658,7 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
 
                 // Update LINK busytimes between adjacent cores (link direction -y)
                 // resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 2) * N_columns].busytime += individual_testtime;
-                resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 2) * N_columns].busytime += max(resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 2) * N_columns].busytime, io_busytime) + individual_testtime;
+                resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 2) * N_columns].busytime = max(resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 2) * N_columns].busytime, io_busytime) + individual_testtime;
 
                 // Update test endtime
                 endtime = max(endtime, resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 2) * N_columns].busytime);
