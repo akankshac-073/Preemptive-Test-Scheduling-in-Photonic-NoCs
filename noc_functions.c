@@ -270,12 +270,13 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             resource_matrix[input_core - 1][input_core - 1].busyports[EAST][INPUT].busytime = max_busytime + individual_testtime;
             resource_matrix[input_core - 1][input_core - 1].busyports[INJECTION][OUTPUT].busytime = max_busytime + individual_testtime;
             resource_matrix[input_core - 1][input_core - 1].busyports[EAST][INPUT].port = INJECTION;
-            resource_matrix[input_core - 1][input_core - 1].busyports[INJECTION][OUTPUT].port = EAST;
-            if (resource_matrix[input_core - 1][input_core - 1].busytime < max_busytime + individual_testtime)
-                resource_matrix[input_core - 1][input_core - 1].busytime = max_busytime + individual_testtime;
+            resource_matrix[input_core - 1][input_core - 1].busyports[INJECTION][OUTPUT].port = EAST;            
 
             // Update test endtime
-            endtime = max(endtime, resource_matrix[input_core - 1][input_core - 1].busytime);
+            endtime = max(endtime, max_busytime + individual_testtime);
+            
+            if (resource_matrix[input_core - 1][input_core - 1].busytime < max_busytime + individual_testtime)
+                resource_matrix[input_core - 1][input_core - 1].busytime = max_busytime + individual_testtime;
 
             // From (input core + 1) to (input core + (difference in x-coordinates - 1))
             // * Index of input core + 1 is input_core
@@ -296,11 +297,12 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 resource_matrix[input_core + j][input_core + j].busyports[WEST][OUTPUT].busytime = max_busytime + individual_testtime;
                 resource_matrix[input_core + j][input_core + j].busyports[EAST][INPUT].port = WEST;
                 resource_matrix[input_core + j][input_core + j].busyports[WEST][OUTPUT].port = EAST;
-                if (resource_matrix[input_core + j][input_core + j].busytime < max_busytime + individual_testtime)
-                    resource_matrix[input_core + j][input_core + j].busytime = max_busytime + individual_testtime;
 
                 // Update test endtime
-                endtime = max(endtime, resource_matrix[input_core + j][input_core + j].busytime);
+                endtime = max(endtime, max_busytime + individual_testtime);
+
+                if (resource_matrix[input_core + j][input_core + j].busytime < max_busytime + individual_testtime)
+                    resource_matrix[input_core + j][input_core + j].busytime = max_busytime + individual_testtime;
             }
         }
 
@@ -324,11 +326,12 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             resource_matrix[input_core - 1][input_core - 1].busyports[INJECTION][OUTPUT].busytime = max_busytime + individual_testtime;
             resource_matrix[input_core - 1][input_core - 1].busyports[WEST][INPUT].port = INJECTION;
             resource_matrix[input_core - 1][input_core - 1].busyports[INJECTION][OUTPUT].port = WEST;
-            if (resource_matrix[input_core - 1][input_core - 1].busytime < max_busytime + individual_testtime)
-                resource_matrix[input_core - 1][input_core - 1].busytime = max_busytime + individual_testtime;
 
             // Update test endtime
-            endtime = max(endtime, resource_matrix[input_core - 1][input_core - 1].busytime);
+            endtime = max(endtime, max_busytime + individual_testtime);
+
+            if (resource_matrix[input_core - 1][input_core - 1].busytime < max_busytime + individual_testtime)
+                resource_matrix[input_core - 1][input_core - 1].busytime = max_busytime + individual_testtime;
 
             // From (input core - 1) to (input core - (difference in x-coordinates - 1))
             // * Index of input core - 1 is input_core - 2
@@ -349,16 +352,17 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 resource_matrix[input_core - j - 2][input_core - j - 2].busyports[EAST][OUTPUT].busytime = max_busytime + individual_testtime;
                 resource_matrix[input_core - j - 2][input_core - j - 2].busyports[WEST][INPUT].port = EAST;
                 resource_matrix[input_core - j - 2][input_core - j - 2].busyports[EAST][OUTPUT].port = WEST;
+
+                // Update test endtime
+                endtime = max(endtime, max_busytime + individual_testtime);
+
                 if (resource_matrix[input_core - j - 2][input_core - j - 2].busytime < max_busytime + individual_testtime)
                     resource_matrix[input_core - j - 2][input_core - j - 2].busytime = max_busytime + individual_testtime;
-
-               // Update test endtime
-               endtime = max(endtime, resource_matrix[input_core - j - 2][input_core - j - 2].busytime);
             }
         }
                 
         else
-            xrouting_port_ic = EJECTION;
+            xrouting_port_ic = INJECTION;
 
         // If test core x coordinate < output core x coordinate, update busytime for resources b/w cores
         if (noc_nodes[test_core - 1].x_cord < noc_nodes[output_core - 1].x_cord) {
@@ -380,11 +384,12 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].busytime = max_busytime + individual_testtime;
             resource_matrix[test_core - 1][test_core - 1].busyports[EAST][INPUT].port = INJECTION;
             resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].port = EAST;
-            if (resource_matrix[test_core - 1][test_core - 1].busytime < max_busytime + individual_testtime)
-                resource_matrix[test_core - 1][test_core - 1].busytime = max_busytime + individual_testtime;
 
             // Update test endtime
-            endtime = max(endtime, resource_matrix[test_core - 1][test_core - 1].busytime);
+            endtime = max(endtime, max_busytime + individual_testtime);
+
+            if (resource_matrix[test_core - 1][test_core - 1].busytime < max_busytime + individual_testtime)
+                resource_matrix[test_core - 1][test_core - 1].busytime = max_busytime + individual_testtime;
 
             // From (test core + 1) to (test core + (difference in x-coordinates - 1))
             // * Index of test core + 1 is input_core
@@ -405,11 +410,12 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 resource_matrix[test_core + j][test_core + j].busyports[WEST][OUTPUT].busytime = max_busytime + individual_testtime;
                 resource_matrix[test_core + j][test_core + j].busyports[EAST][INPUT].port = WEST;
                 resource_matrix[test_core + j][test_core + j].busyports[WEST][OUTPUT].port = EAST;
-                if (resource_matrix[test_core + j][test_core + j].busytime < max_busytime + individual_testtime)
-                    resource_matrix[test_core + j][test_core + j].busytime = max_busytime + individual_testtime;
 
                 // Update test endtime
-                endtime = max(endtime, resource_matrix[test_core + j][test_core + j].busytime);
+                endtime = max(endtime, max_busytime + individual_testtime);
+
+                if (resource_matrix[test_core + j][test_core + j].busytime < max_busytime + individual_testtime)
+                    resource_matrix[test_core + j][test_core + j].busytime = max_busytime + individual_testtime;
             }
         }
 
@@ -433,11 +439,12 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].busytime = max_busytime + individual_testtime;
             resource_matrix[test_core - 1][test_core - 1].busyports[WEST][INPUT].port = INJECTION;
             resource_matrix[test_core - 1][test_core - 1].busyports[INJECTION][OUTPUT].port = WEST;
-            if (resource_matrix[test_core - 1][test_core - 1].busytime < max_busytime + individual_testtime)
-                resource_matrix[test_core - 1][test_core - 1].busytime = max_busytime + individual_testtime;
 
             // Update test endtime
-            endtime = max(endtime, resource_matrix[test_core - 1][test_core - 1].busytime);
+            endtime = max(endtime, max_busytime + individual_testtime);
+
+            if (resource_matrix[test_core - 1][test_core - 1].busytime < max_busytime + individual_testtime)
+                resource_matrix[test_core - 1][test_core - 1].busytime = max_busytime + individual_testtime;
 
             // From (test core - 1) to (test core - (difference in x-coordinates - 1))
             // * Index of test core - 1 is input_core - 2
@@ -458,16 +465,17 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 resource_matrix[test_core - j - 2][test_core - j - 2].busyports[EAST][OUTPUT].busytime = max_busytime + individual_testtime;
                 resource_matrix[test_core - j - 2][test_core - j - 2].busyports[WEST][INPUT].port = EAST;
                 resource_matrix[test_core - j - 2][test_core - j - 2].busyports[EAST][OUTPUT].port = WEST;
-                if (resource_matrix[test_core - j - 2][test_core - j - 2].busytime < max_busytime + individual_testtime)
-                    resource_matrix[test_core - j - 2][test_core - j - 2].busytime = max_busytime + individual_testtime;
 
                 // Update test endtime
-                endtime = max(endtime, resource_matrix[test_core - j - 2][test_core - j - 2].busytime);
+                endtime = max(endtime, max_busytime + individual_testtime);
+
+                if (resource_matrix[test_core - j - 2][test_core - j - 2].busytime < max_busytime + individual_testtime)
+                    resource_matrix[test_core - j - 2][test_core - j - 2].busytime = max_busytime + individual_testtime;
             }
         }
                 
         else
-            xrouting_port_co = EJECTION;
+            xrouting_port_co = INJECTION;
 
         // ------------------------------------------------------------------ Y ROUTING LOGIC ------------------------------------------------------------------
             
@@ -493,11 +501,12 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             resource_matrix[ic_core - 1][ic_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime = max_busytime + individual_testtime;
             resource_matrix[ic_core - 1][ic_core - 1].busyports[NORTH][INPUT].port = xrouting_port_ic;
             resource_matrix[ic_core - 1][ic_core - 1].busyports[xrouting_port_ic][OUTPUT].port = NORTH;
-            if (resource_matrix[ic_core - 1][ic_core - 1].busytime < max_busytime + individual_testtime)
-                resource_matrix[ic_core - 1][ic_core - 1].busytime = max_busytime + individual_testtime;
 
             // Update test endtime
-            endtime = max(endtime, resource_matrix[ic_core - 1][ic_core - 1].busytime);
+            endtime = max(endtime, max_busytime + individual_testtime);
+
+            if (resource_matrix[ic_core - 1][ic_core - 1].busytime < max_busytime + individual_testtime)
+                resource_matrix[ic_core - 1][ic_core - 1].busytime = max_busytime + individual_testtime;
 
             // From (intermediate core + N columns) to (intermediate core + N columns * (difference in y-coordinates - 1))
             // * Index of intermediate core + N columns is intermediate_core - 1 + N columns
@@ -518,11 +527,12 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[SOUTH][OUTPUT].busytime = max_busytime + individual_testtime;
                 resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[NORTH][INPUT].port = SOUTH;
                 resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busyports[SOUTH][OUTPUT].port = NORTH;
-                if (resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busytime < max_busytime + individual_testtime)
-                    resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busytime = max_busytime + individual_testtime;
 
                 // Update test endtime
-                endtime = max(endtime, resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busytime);
+                endtime = max(endtime, max_busytime + individual_testtime);
+
+                if (resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busytime < max_busytime + individual_testtime)
+                    resource_matrix[ic_core - 1 + (j + 1) * N_columns][ic_core - 1 + (j + 1) * N_columns].busytime = max_busytime + individual_testtime;
             }
         } 
 
@@ -544,11 +554,12 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             resource_matrix[ic_core - 1][ic_core - 1].busyports[xrouting_port_ic][OUTPUT].busytime = max_busytime + individual_testtime;
             resource_matrix[ic_core - 1][ic_core - 1].busyports[SOUTH][INPUT].port = xrouting_port_ic;
             resource_matrix[ic_core - 1][ic_core - 1].busyports[xrouting_port_ic][OUTPUT].port = SOUTH;
-            if (resource_matrix[ic_core - 1][ic_core - 1].busytime < max_busytime + individual_testtime)
-                resource_matrix[ic_core - 1][ic_core - 1].busytime = max_busytime + individual_testtime;
 
             // Update test endtime
-            endtime = max(endtime, resource_matrix[ic_core - 1][ic_core - 1].busytime);
+            endtime = max(endtime, max_busytime + individual_testtime);
+
+            if (resource_matrix[ic_core - 1][ic_core - 1].busytime < max_busytime + individual_testtime)
+                resource_matrix[ic_core - 1][ic_core - 1].busytime = max_busytime + individual_testtime;
 
             // From (intermediate core - N columns) to (intermediate core - N columns * (difference in y-coordinates - 1))
             // * Index of intermediate core - N columns is intermediate_core - 1 - N columns
@@ -569,11 +580,12 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[NORTH][OUTPUT].busytime = max_busytime + individual_testtime;
                 resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[SOUTH][INPUT].port = NORTH;
                 resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busyports[NORTH][OUTPUT].port = SOUTH;
-                if (resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busytime < max_busytime + individual_testtime)
-                    resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busytime = max_busytime + individual_testtime;
 
                 // Update test endtime
-                endtime = max(endtime, resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busytime);
+                endtime = max(endtime, max_busytime + individual_testtime);
+
+                if (resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busytime < max_busytime + individual_testtime)
+                    resource_matrix[ic_core - 1 - (j + 1) * N_columns][ic_core - 1 - (j + 1) * N_columns].busytime = max_busytime + individual_testtime;
             }
         }
 
@@ -595,11 +607,12 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_co][OUTPUT].busytime = max_busytime + individual_testtime;
             resource_matrix[co_core - 1][co_core - 1].busyports[NORTH][INPUT].port = xrouting_port_co;
             resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_co][OUTPUT].port = NORTH;
-            if (resource_matrix[co_core - 1][co_core - 1].busytime < max_busytime + individual_testtime)
-                resource_matrix[co_core - 1][co_core - 1].busytime = max_busytime + individual_testtime;
 
             // Update test endtime
-            endtime = max(endtime, resource_matrix[co_core - 1][co_core - 1].busytime);
+            endtime = max(endtime, max_busytime + individual_testtime);
+
+            if (resource_matrix[co_core - 1][co_core - 1].busytime < max_busytime + individual_testtime)
+                resource_matrix[co_core - 1][co_core - 1].busytime = max_busytime + individual_testtime;
 
             // From (intermediate core + N columns) to (intermediate core + N columns * (difference in y-coordinates - 1))
             // * Index of intermediate core + N columns is intermediate_core - 1 + N columns
@@ -620,11 +633,12 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[SOUTH][OUTPUT].busytime = max_busytime + individual_testtime;
                 resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[NORTH][INPUT].port = SOUTH;
                 resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busyports[SOUTH][OUTPUT].port = NORTH;
-                if (resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busytime < max_busytime + individual_testtime)
-                    resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busytime = max_busytime + individual_testtime;
 
                 // Update test endtime
-                endtime = max(endtime, resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busytime);
+                endtime = max(endtime, max_busytime + individual_testtime);
+
+                if (resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busytime < max_busytime + individual_testtime)
+                    resource_matrix[co_core - 1 + (j + 1) * N_columns][co_core - 1 + (j + 1) * N_columns].busytime = max_busytime + individual_testtime;
             }
         }
 
@@ -646,11 +660,12 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
             resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_co][OUTPUT].busytime = max_busytime + individual_testtime;
             resource_matrix[co_core - 1][co_core - 1].busyports[SOUTH][INPUT].port = xrouting_port_co;
             resource_matrix[co_core - 1][co_core - 1].busyports[xrouting_port_co][OUTPUT].port = SOUTH;
-            if (resource_matrix[co_core - 1][co_core - 1].busytime < max_busytime + individual_testtime)
-                resource_matrix[co_core - 1][co_core - 1].busytime = max_busytime + individual_testtime;
 
             // Update test endtime
-            endtime = max(endtime, resource_matrix[co_core - 1][co_core - 1].busytime);
+            endtime = max(endtime, max_busytime + individual_testtime);
+
+            if (resource_matrix[co_core - 1][co_core - 1].busytime < max_busytime + individual_testtime)
+                resource_matrix[co_core - 1][co_core - 1].busytime = max_busytime + individual_testtime;
 
             // From (intermediate core - N columns) to (intermediate core - N columns * (difference in y-coordinates - 1))
             // * Index of intermediate core - N columns is intermediate_core - 1 - N columns
@@ -671,11 +686,12 @@ void find_resource_busytimes (PSO_particle *pso_particle, NoC_node *noc_nodes, i
                 resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[NORTH][OUTPUT].busytime = max_busytime + individual_testtime;
                 resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[SOUTH][INPUT].port = NORTH;
                 resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busyports[NORTH][OUTPUT].port = SOUTH;
-                if (resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busytime < max_busytime + individual_testtime)
-                    resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busytime = max_busytime + individual_testtime;
 
                 // Update test endtime
-                endtime = max(endtime, resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busytime);
+                endtime = max(endtime, max_busytime + individual_testtime);
+
+                if (resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busytime < max_busytime + individual_testtime)
+                    resource_matrix[co_core - 1 - (j + 1) * N_columns][co_core - 1 - (j + 1) * N_columns].busytime = max_busytime + individual_testtime;
             }
         }
 
@@ -1050,6 +1066,7 @@ void particle_swarm_optimization (NoC_node *noc_nodes, int num_cores, int M_rows
 
         for (int i = 0; i < num_io_pairs; i++)
             print_IO_schedule_lists (io_pairs[i].io_head);
+        printf("\n");
     // }   
     print_pso_particle_info (pso_particle, num_test_cores);
     print_global_best_info((&gbest_pso_particle), num_test_cores);
